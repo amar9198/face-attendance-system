@@ -11,11 +11,20 @@ __pycache__/
 # ============================================================
 # Virtual environments
 # ============================================================
-
 venv/
-.venv/
-env/
+__pycache__/
+*.pyc
+*.log
+.env
+.DS_Store
+Thumbs.db
 
+# Camera/training temporary files
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
 
 # ============================================================
 # Dataset / biometric images

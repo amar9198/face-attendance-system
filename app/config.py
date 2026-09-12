@@ -104,8 +104,9 @@ FLASK_PORT = int(
         os.environ.get("FLASK_PORT", 5000)
     )
 )
-FLASK_DEBUG = True
-SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
+FLASK_DEBUG = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
+
+SECRET_KEY = os.environ.get("SECRET_KEY", "change-this-secret-key")
 
 # ---------------------------------------------------------------------------
 # Ensure required directories exist (created automatically, no manual setup)
