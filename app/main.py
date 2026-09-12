@@ -25,6 +25,7 @@ from datetime import datetime
 
 import cv2
 import pandas as pd
+import numpy as np
 
 from flask import (
     Flask,
@@ -1220,7 +1221,91 @@ def api_live_results():
         "results": results
     })
 
+# ============================================================
+# BROWSER CAMERA RECOGNITION
+# ============================================================
 
+@app.route(
+    "/api/recognize-frame",
+    methods=["POST"]
+)
+def recognize_frame():
+
+    try:
+
+        if "image" not in request.files:
+
+            return jsonify({
+
+                "success": False,
+
+                "message": "No image received."
+
+            }), 400
+
+
+        image_file = request.files["image"]
+
+        image_bytes = image_file.read()
+
+
+        np_array = np.frombuffer(
+            image_bytes,
+            np.uint8
+        )
+
+
+        frame = cv2.imdecode(
+
+            np_array,
+
+            cv2.IMREAD_COLOR
+
+        )
+
+
+        if frame is None:
+
+            return jsonify({
+
+                "success": False,
+
+                "message": "Invalid image."
+
+            }), 400
+
+
+        pipeline = get_pipeline()
+
+
+        annotated_frame, results = (
+            pipeline.process_frame(frame)
+        )
+
+
+        return jsonify({
+
+            "success": True,
+
+            "results": results or []
+
+        })
+
+
+    except Exception as exc:
+
+        logger.exception(
+            "Browser recognition error"
+        )
+
+
+        return jsonify({
+
+            "success": False,
+
+            "message": str(exc)
+
+        }), 500
 # ============================================================
 # ATTENDANCE HISTORY
 # ============================================================

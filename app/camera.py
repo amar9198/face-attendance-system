@@ -107,21 +107,40 @@ class VideoCamera:
 
             with self._frame_lock:
                 self._frame = None
-
-
             # ------------------------------------------------
             # OPEN CAMERA
             # ------------------------------------------------
 
             try:
 
+                cap = None
+
                 if os.name == "nt":
 
-                    # Windows: DirectShow usually starts faster
+                    # Try DirectShow first
                     cap = cv2.VideoCapture(
                         self.camera_index,
                         cv2.CAP_DSHOW
                     )
+
+                    # If DirectShow fails, try MSMF
+                    if not cap.isOpened():
+
+                        cap.release()
+
+                        cap = cv2.VideoCapture(
+                            self.camera_index,
+                            cv2.CAP_MSMF
+                        )
+
+                    # Final fallback
+                    if not cap.isOpened():
+
+                        cap.release()
+
+                        cap = cv2.VideoCapture(
+                            self.camera_index
+                        )
 
                 else:
 
@@ -134,7 +153,6 @@ class VideoCamera:
                 raise CameraUnavailableError(
                     f"Could not initialize camera: {exc}"
                 )
-
 
             # ------------------------------------------------
             # CHECK CAMERA
