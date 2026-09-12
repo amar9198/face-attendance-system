@@ -18,7 +18,11 @@ Attendance - Face Attendance System
     Attendance History
 </h2>
 
-<div class="card mb-4">
+
+<!-- FILTERS -->
+
+<div class="card mb-4 shadow-sm">
+
     <div class="card-body">
 
         <form class="row g-3 align-items-end" method="get">
@@ -26,7 +30,10 @@ Attendance - Face Attendance System
             <!-- DATE -->
 
             <div class="col-md-3">
-                <label class="form-label">Date</label>
+
+                <label class="form-label">
+                    Date
+                </label>
 
                 <input
                     type="date"
@@ -34,6 +41,7 @@ Attendance - Face Attendance System
                     name="date"
                     value="{{ filters.date }}"
                 >
+
             </div>
 
 
@@ -41,12 +49,17 @@ Attendance - Face Attendance System
 
             <div class="col-md-3">
 
-                <label class="form-label">Student</label>
+                <label class="form-label">
+                    Student
+                </label>
 
-                <select class="form-select" name="student_id">
+                <select
+                    class="form-select"
+                    name="student_id"
+                >
 
                     <option value="">
-                        All students
+                        All Students
                     </option>
 
                     {% for s in all_students %}
@@ -54,10 +67,12 @@ Attendance - Face Attendance System
                     <option
                         value="{{ s.student_id }}"
                         {% if filters.student_id == s.student_id %}
-                        selected
+                            selected
                         {% endif %}
                     >
+
                         {{ s.student_id }} - {{ s.name }}
+
                     </option>
 
                     {% endfor %}
@@ -71,9 +86,14 @@ Attendance - Face Attendance System
 
             <div class="col-md-3">
 
-                <label class="form-label">Status</label>
+                <label class="form-label">
+                    Status
+                </label>
 
-                <select class="form-select" name="status">
+                <select
+                    class="form-select"
+                    name="status"
+                >
 
                     <option value="">
                         Any
@@ -82,7 +102,7 @@ Attendance - Face Attendance System
                     <option
                         value="Present"
                         {% if filters.status == "Present" %}
-                        selected
+                            selected
                         {% endif %}
                     >
                         Present
@@ -101,8 +121,10 @@ Attendance - Face Attendance System
                     type="submit"
                     class="btn btn-primary"
                 >
+
                     <i class="bi bi-funnel"></i>
                     Filter
+
                 </button>
 
 
@@ -118,14 +140,13 @@ Attendance - Face Attendance System
         </form>
 
     </div>
+
 </div>
 
 
-<!-- ========================================================= -->
 <!-- ATTENDANCE TABLE -->
-<!-- ========================================================= -->
 
-<div class="card">
+<div class="card shadow-sm">
 
     <div class="card-body">
 
@@ -215,12 +236,14 @@ Attendance - Face Attendance System
 
         {% else %}
 
-        <div class="text-center text-muted py-4">
+        <div class="text-center text-muted py-5">
 
             <i class="bi bi-calendar-x fs-1"></i>
 
             <p class="mt-3 mb-0">
+
                 No attendance records match these filters.
+
             </p>
 
         </div>
@@ -249,6 +272,7 @@ Attendance - Face Attendance System
 </h2>
 
 
+
 <!-- MODEL WARNING -->
 
 {% if not model_ready %}
@@ -271,9 +295,9 @@ Attendance - Face Attendance System
 <div class="row g-4">
 
 
-    <!-- ===================================================== -->
+    <!-- ========================================================= -->
     <!-- CAMERA -->
-    <!-- ===================================================== -->
+    <!-- ========================================================= -->
 
     <div class="col-lg-8">
 
@@ -282,20 +306,33 @@ Attendance - Face Attendance System
             <div class="card-body text-center">
 
 
-                <!-- LIVE CAMERA -->
+                <!-- CAMERA VIDEO -->
 
-                <img
-                    id="liveFeed"
-                    class="img-fluid rounded video-frame d-none"
-                    alt="Live camera feed"
+                <video
+                    id="liveVideo"
+                    autoplay
+                    playsinline
+                    muted
+                    class="w-100 rounded d-none"
+                    style="max-height: 520px; background: #000;"
                 >
+                </video>
+
+
+                <!-- HIDDEN CANVAS -->
+
+                <canvas
+                    id="captureCanvas"
+                    class="d-none"
+                >
+                </canvas>
 
 
                 <!-- CAMERA PLACEHOLDER -->
 
                 <div
                     id="liveFeedPlaceholder"
-                    class="video-placeholder"
+                    class="video-placeholder py-5"
                 >
 
                     <i class="bi bi-camera-video-off display-4"></i>
@@ -312,10 +349,12 @@ Attendance - Face Attendance System
             </div>
 
 
-            <!-- CAMERA BUTTONS -->
+            <!-- CAMERA CONTROLS -->
 
             <div class="card-footer d-flex gap-2">
 
+
+                <!-- START -->
 
                 <button
                     id="startBtn"
@@ -332,6 +371,8 @@ Attendance - Face Attendance System
 
 
 
+                <!-- STOP -->
+
                 <button
                     id="stopBtn"
                     class="btn btn-danger d-none"
@@ -346,6 +387,18 @@ Attendance - Face Attendance System
                 </button>
 
 
+                <!-- STATUS -->
+
+                <span
+                    id="cameraStatus"
+                    class="ms-auto text-muted align-self-center"
+                >
+
+                    Camera stopped
+
+                </span>
+
+
             </div>
 
         </div>
@@ -354,15 +407,16 @@ Attendance - Face Attendance System
 
 
 
-    <!-- ===================================================== -->
+    <!-- ========================================================= -->
     <!-- RECOGNITION RESULTS -->
-    <!-- ===================================================== -->
+    <!-- ========================================================= -->
 
     <div class="col-lg-4">
 
-        <div class="card shadow-sm">
+        <div class="card shadow-sm h-100">
 
             <div class="card-body">
+
 
                 <h5 class="card-title mb-3">
 
@@ -371,6 +425,7 @@ Attendance - Face Attendance System
                     Recognized Now
 
                 </h5>
+
 
 
                 <div
@@ -403,156 +458,27 @@ Attendance - Face Attendance System
 
 
 
+<!-- ========================================================= -->
+<!-- JAVASCRIPT -->
+<!-- ========================================================= -->
+
 {% block scripts %}
 
 <script>
+
 
 /* =========================================================
    GLOBAL VARIABLES
 ========================================================= */
 
-let pollTimer = null;
-let isStarting = false;
-let isStopping = false;
+let userStream = null;
 
+let recognitionTimer = null;
 
-/* =========================================================
-   CAMERA UI
-========================================================= */
+let isCameraRunning = false;
 
-function setCameraUI(running) {
+let recognitionInProgress = false;
 
-    const liveFeed = document.getElementById("liveFeed");
-    const placeholder = document.getElementById("liveFeedPlaceholder");
-    const startBtn = document.getElementById("startBtn");
-    const stopBtn = document.getElementById("stopBtn");
-    const resultsList = document.getElementById("resultsList");
-
-    /* Attendance history page */
-    if (!liveFeed) {
-        return;
-    }
-
-
-    /* =====================================================
-       CAMERA RUNNING
-    ===================================================== */
-
-    if (running) {
-
-        liveFeed.classList.remove("d-none");
-        placeholder.classList.add("d-none");
-
-        startBtn.classList.add("d-none");
-        stopBtn.classList.remove("d-none");
-
-        /* Reset buttons */
-        startBtn.disabled = false;
-        stopBtn.disabled = false;
-
-        startBtn.innerHTML = `
-            <i class="bi bi-play-fill"></i>
-            Start Camera
-        `;
-
-        stopBtn.innerHTML = `
-            <i class="bi bi-stop-fill"></i>
-            Stop Camera
-        `;
-
-
-        /* Start fresh MJPEG stream */
-
-        liveFeed.src = "";
-
-        setTimeout(() => {
-
-            liveFeed.src =
-                "/video_feed/live?t=" + Date.now();
-
-        }, 100);
-
-
-        /* Stop old polling */
-
-        if (pollTimer) {
-
-            clearInterval(pollTimer);
-
-            pollTimer = null;
-        }
-
-
-        /* Start recognition polling */
-
-        pollResults();
-
-        pollTimer = setInterval(
-            pollResults,
-            1000
-        );
-
-
-        resultsList.innerHTML = `
-            <div class="text-success">
-                <i class="bi bi-search"></i>
-                Camera started. Looking for faces...
-            </div>
-        `;
-
-    }
-
-
-    /* =====================================================
-       CAMERA STOPPED
-    ===================================================== */
-
-    else {
-
-        /* Stop MJPEG stream */
-
-        liveFeed.src = "";
-
-        liveFeed.classList.add("d-none");
-        placeholder.classList.remove("d-none");
-
-        startBtn.classList.remove("d-none");
-        stopBtn.classList.add("d-none");
-
-
-        /* Reset button states */
-
-        startBtn.disabled = false;
-        stopBtn.disabled = false;
-
-        startBtn.innerHTML = `
-            <i class="bi bi-play-fill"></i>
-            Start Camera
-        `;
-
-        stopBtn.innerHTML = `
-            <i class="bi bi-stop-fill"></i>
-            Stop Camera
-        `;
-
-
-        /* Stop recognition polling */
-
-        if (pollTimer) {
-
-            clearInterval(pollTimer);
-
-            pollTimer = null;
-        }
-
-
-        resultsList.innerHTML = `
-            <span class="text-muted">
-                Camera not running.
-            </span>
-        `;
-    }
-}
 
 
 /* =========================================================
@@ -561,487 +487,754 @@ function setCameraUI(running) {
 
 async function startCamera() {
 
-    if (isStarting || isStopping) {
-        return;
-    }
+    const video =
+        document.getElementById("liveVideo");
 
-
-    isStarting = true;
-
+    const placeholder =
+        document.getElementById("liveFeedPlaceholder");
 
     const startBtn =
         document.getElementById("startBtn");
 
+    const stopBtn =
+        document.getElementById("stopBtn");
 
-    if (startBtn) {
+    const resultsList =
+        document.getElementById("resultsList");
 
-        startBtn.disabled = true;
+    const cameraStatus =
+        document.getElementById("cameraStatus");
 
-        startBtn.innerHTML = `
-            <span
-                class="spinner-border spinner-border-sm"
-                role="status"
-            ></span>
 
-            Starting...
-        `;
+    if (isCameraRunning) {
+        return;
     }
 
 
     try {
 
-        console.log("Starting camera...");
+        startBtn.disabled = true;
 
 
-        const response = await fetch(
-            "/api/camera/start",
-            {
-                method: "POST"
-            }
-        );
+        startBtn.innerHTML = `
+            <span class="spinner-border spinner-border-sm"></span>
+            Starting...
+        `;
 
 
-        const data = await response.json();
+        cameraStatus.textContent =
+            "Requesting camera permission...";
 
 
-        if (!response.ok || !data.success) {
+        /*
+        Browser camera access.
 
-            throw new Error(
-                data.message ||
-                "Could not start camera."
+        This works on the user's device/browser.
+
+        No CAMERA_INDEX is needed here.
+        */
+
+        userStream =
+            await navigator.mediaDevices.getUserMedia({
+
+                video: {
+
+                    width: {
+                        ideal: 1280
+                    },
+
+                    height: {
+                        ideal: 720
+                    },
+
+                    facingMode: {
+                        ideal: "user"
+                    }
+
+                },
+
+                audio: false
+
+            });
+
+
+        /* Attach stream */
+
+        video.srcObject =
+            userStream;
+
+
+        await video.play();
+
+
+        /* Update UI */
+
+        video.classList.remove("d-none");
+
+        placeholder.classList.add("d-none");
+
+        startBtn.classList.add("d-none");
+
+        stopBtn.classList.remove("d-none");
+
+
+        isCameraRunning = true;
+
+
+        cameraStatus.textContent =
+            "Camera running";
+
+
+        resultsList.innerHTML = `
+
+            <div class="text-success">
+
+                <i class="bi bi-search"></i>
+
+                Camera started. Looking for faces...
+
+            </div>
+
+        `;
+
+
+        /* Start recognition every 1 second */
+
+        recognitionTimer =
+            setInterval(
+                sendFrameForRecognition,
+                1000
             );
-        }
 
 
-        console.log(
-            "Camera started successfully."
+        /* First recognition */
+
+        setTimeout(
+            sendFrameForRecognition,
+            500
         );
 
-
-        setCameraUI(true);
 
     }
-
-
     catch (error) {
 
         console.error(
-            "Camera start error:",
+            "Camera error:",
             error
         );
 
 
-        alert(
-            "Camera error: " +
-            error.message
-        );
+        let message =
+            "Could not access camera.";
 
 
-        setCameraUI(false);
+        if (
+            error.name === "NotAllowedError"
+        ) {
+
+            message =
+                "Camera permission was denied. Please allow camera access.";
+
+        }
+        else if (
+            error.name === "NotFoundError"
+        ) {
+
+            message =
+                "No camera was found on this device.";
+
+        }
+        else if (
+            error.name === "NotReadableError"
+        ) {
+
+            message =
+                "Camera is already being used by another application.";
+
+        }
+        else if (
+            error.name === "SecurityError"
+        ) {
+
+            message =
+                "Camera access requires HTTPS or localhost.";
+
+        }
+
+
+        alert(message);
+
+
+        cameraStatus.textContent =
+            message;
+
+
+        resultsList.innerHTML = `
+
+            <div class="text-danger">
+
+                <i class="bi bi-exclamation-triangle"></i>
+
+                ${message}
+
+            </div>
+
+        `;
 
     }
-
-
     finally {
 
-        isStarting = false;
+        startBtn.disabled = false;
+
+
+        startBtn.innerHTML = `
+
+            <i class="bi bi-play-fill"></i>
+
+            Start Camera
+
+        `;
 
     }
+
 }
+
+
 
 
 /* =========================================================
    STOP CAMERA
 ========================================================= */
 
-async function stopCamera() {
-
-    if (isStopping) {
-        return;
-    }
+function stopCamera() {
 
 
-    isStopping = true;
+    const video =
+        document.getElementById("liveVideo");
+
+
+    const placeholder =
+        document.getElementById(
+            "liveFeedPlaceholder"
+        );
+
+
+    const startBtn =
+        document.getElementById("startBtn");
 
 
     const stopBtn =
         document.getElementById("stopBtn");
 
 
+    const resultsList =
+        document.getElementById("resultsList");
+
+
+    const cameraStatus =
+        document.getElementById("cameraStatus");
+
+
+    /* Stop recognition timer */
+
+    if (recognitionTimer) {
+
+        clearInterval(
+            recognitionTimer
+        );
+
+        recognitionTimer = null;
+
+    }
+
+
+    /* Stop camera stream */
+
+    if (userStream) {
+
+        userStream
+            .getTracks()
+            .forEach(track => {
+
+                track.stop();
+
+            });
+
+
+        userStream = null;
+
+    }
+
+
+    /* Clear video */
+
+    if (video) {
+
+        video.pause();
+
+        video.srcObject = null;
+
+        video.classList.add("d-none");
+
+    }
+
+
+    /* Show placeholder */
+
+    if (placeholder) {
+
+        placeholder.classList.remove(
+            "d-none"
+        );
+
+    }
+
+
+    /* Buttons */
+
+    if (startBtn) {
+
+        startBtn.classList.remove(
+            "d-none"
+        );
+
+    }
+
+
     if (stopBtn) {
 
-        stopBtn.disabled = true;
+        stopBtn.classList.add(
+            "d-none"
+        );
 
-        stopBtn.innerHTML = `
-            <span
-                class="spinner-border spinner-border-sm"
-                role="status"
-            ></span>
+    }
 
-            Stopping...
+
+    isCameraRunning = false;
+
+
+    recognitionInProgress = false;
+
+
+    /* Status */
+
+    if (cameraStatus) {
+
+        cameraStatus.textContent =
+            "Camera stopped";
+
+    }
+
+
+    if (resultsList) {
+
+        resultsList.innerHTML = `
+
+            <span class="text-muted">
+
+                Camera not running.
+
+            </span>
+
         `;
-    }
-
-
-    /* =====================================================
-       IMMEDIATELY STOP BROWSER STREAM
-    ===================================================== */
-
-    const liveFeed =
-        document.getElementById("liveFeed");
-
-
-    if (liveFeed) {
-
-        liveFeed.src = "";
 
     }
 
+}
 
-    /* Stop polling immediately */
 
-    if (pollTimer) {
 
-        clearInterval(pollTimer);
 
-        pollTimer = null;
+/* =========================================================
+   SEND FRAME FOR RECOGNITION
+========================================================= */
+
+async function sendFrameForRecognition() {
+
+
+    /* Prevent multiple simultaneous requests */
+
+    if (recognitionInProgress) {
+        return;
+    }
+
+
+    if (!isCameraRunning) {
+        return;
+    }
+
+
+    const video =
+        document.getElementById("liveVideo");
+
+
+    const canvas =
+        document.getElementById("captureCanvas");
+
+
+    if (
+        !video ||
+        !canvas ||
+        video.readyState < 2 ||
+        !video.videoWidth
+    ) {
+
+        return;
 
     }
+
+
+    recognitionInProgress = true;
 
 
     try {
 
-        console.log("Stopping camera...");
+
+        /* Resize frame before sending */
+
+        const width = 640;
 
 
-        const response = await fetch(
-            "/api/camera/stop",
-            {
-                method: "POST"
-            }
+        const height =
+            Math.round(
+
+                video.videoHeight *
+
+                (
+                    width /
+                    video.videoWidth
+                )
+
+            );
+
+
+        canvas.width = width;
+
+        canvas.height = height;
+
+
+        const context =
+            canvas.getContext("2d");
+
+
+        context.drawImage(
+
+            video,
+
+            0,
+
+            0,
+
+            width,
+
+            height
+
         );
 
 
-        const data = await response.json();
+        /* Convert canvas to JPEG */
+
+        const blob =
+            await new Promise(resolve => {
+
+                canvas.toBlob(
+
+                    resolve,
+
+                    "image/jpeg",
+
+                    0.85
+
+                );
+
+            });
 
 
-        if (!response.ok || !data.success) {
+        if (!blob) {
 
-            throw new Error(
-                data.message ||
-                "Could not stop camera."
-            );
+            return;
 
         }
 
 
-        console.log(
-            "Camera stopped successfully."
-        );
+        /* Create FormData */
 
-
-        setCameraUI(false);
-
-    }
-
-
-    catch (error) {
-
-        console.error(
-            "Camera stop error:",
-            error
-        );
+        const formData =
+            new FormData();
 
 
         /*
-         * Update UI anyway so it does not
-         * remain stuck on "Stopping..."
-         */
+        IMPORTANT:
 
-        setCameraUI(false);
+        The backend must use:
 
+        request.files["frame"]
 
-        alert(
-            "Camera stop error: " +
-            error.message
+        */
+
+        formData.append(
+
+            "frame",
+
+            blob,
+
+            "frame.jpg"
+
         );
 
-    }
+
+        /* Send frame to Flask */
+
+        const response =
+            await fetch(
+
+                "/api/recognize-frame",
+
+                {
+
+                    method: "POST",
+
+                    body: formData
+
+                }
+
+            );
 
 
-    finally {
-
-        isStopping = false;
-
-    }
-}
+        let data;
 
 
-/* =========================================================
-   POLL RECOGNITION RESULTS
-========================================================= */
+        try {
 
-async function pollResults() {
+            data =
+                await response.json();
 
-    try {
+        }
+        catch {
 
-        const response = await fetch(
-            "/api/live/results"
-        );
+            throw new Error(
+                "Server returned an invalid response."
+            );
+
+        }
 
 
         if (!response.ok) {
 
             throw new Error(
-                "Could not get recognition results."
+
+                data.message ||
+
+                data.error ||
+
+                "Recognition failed"
+
             );
 
         }
 
 
-        const data =
-            await response.json();
+        /* Display recognition results */
 
+        displayResults(
+            data.results || []
+        );
 
-        const box =
-            document.getElementById(
-                "resultsList"
-            );
-
-
-        if (!box) {
-            return;
-        }
-
-
-        /* No faces detected */
-
-        if (
-            !data.results ||
-            data.results.length === 0
-        ) {
-
-            box.innerHTML = `
-                <div class="text-muted">
-                    <i class="bi bi-person-x"></i>
-                    No faces currently detected.
-                </div>
-            `;
-
-            return;
-
-        }
-
-
-        /* =================================================
-           DISPLAY MULTIPLE RECOGNIZED PEOPLE
-        ================================================= */
-
-        box.innerHTML =
-            data.results.map(r => {
-
-
-                let badge = "bg-secondary";
-
-
-                if (r.status === "Unknown") {
-
-                    badge = "bg-danger";
-
-                }
-
-                else if (r.status === "Present") {
-
-                    badge = "bg-success";
-
-                }
-
-                else {
-
-                    badge =
-                        "bg-warning text-dark";
-
-                }
-
-
-                const confidence = (
-                    (r.confidence || 0) * 100
-                ).toFixed(0);
-
-
-                return `
-
-                    <div
-                        class="border rounded p-3 mb-2"
-                    >
-
-                        <div class="fw-bold">
-
-                            <i class="bi bi-person"></i>
-
-                            ${r.name || "Unknown"}
-
-                        </div>
-
-
-                        ${
-                            r.student_id
-
-                            ?
-
-                            `
-                            <div class="text-muted small">
-
-                                ID:
-                                ${r.student_id}
-
-                            </div>
-                            `
-
-                            :
-
-                            ""
-                        }
-
-
-                        <div class="mt-2">
-
-                            <span
-                                class="badge ${badge}"
-                            >
-
-                                ${r.status || "Unknown"}
-
-                            </span>
-
-
-                            <span
-                                class="text-muted ms-2"
-                            >
-
-                                ${confidence}%
-
-                            </span>
-
-                        </div>
-
-                    </div>
-
-                `;
-
-            }).join("");
 
     }
-
-
     catch (error) {
 
         console.error(
-            "Recognition polling error:",
+            "Recognition error:",
             error
         );
 
     }
+    finally {
+
+        recognitionInProgress = false;
+
+    }
+
 }
 
 
+
+
 /* =========================================================
-   CHECK CAMERA STATUS
+   DISPLAY RESULTS
 ========================================================= */
 
-async function checkCameraStatus() {
-
-    const liveFeed =
-        document.getElementById("liveFeed");
+function displayResults(results) {
 
 
-    /* Not on live attendance page */
+    const box =
+        document.getElementById(
+            "resultsList"
+        );
 
-    if (!liveFeed) {
+
+    if (!box) {
         return;
     }
 
 
-    try {
+    /* No face */
 
-        const response = await fetch(
-            "/api/camera/status"
-        );
+    if (
+        !results ||
+        results.length === 0
+    ) {
 
+        box.innerHTML = `
 
-        const data =
-            await response.json();
+            <div class="text-muted">
 
+                <i class="bi bi-person-x"></i>
 
-        setCameraUI(
-            Boolean(data.camera_running)
-        );
+                No face detected.
 
-    }
+            </div>
 
-
-    catch (error) {
-
-        console.error(
-            "Camera status error:",
-            error
-        );
+        `;
 
 
-        setCameraUI(false);
+        return;
 
     }
+
+
+    /* Display faces */
+
+    box.innerHTML =
+        results.map(r => {
+
+
+            let badge =
+                "bg-secondary";
+
+
+            if (
+                r.status === "Unknown"
+            ) {
+
+                badge =
+                    "bg-danger";
+
+            }
+            else if (
+                r.status === "Present"
+            ) {
+
+                badge =
+                    "bg-success";
+
+            }
+            else {
+
+                badge =
+                    "bg-warning text-dark";
+
+            }
+
+
+            const confidence =
+
+                (
+                    (r.confidence || 0) * 100
+                ).toFixed(1);
+
+
+            return `
+
+                <div
+                    class="border rounded p-3 mb-2"
+                >
+
+
+                    <div class="fw-bold">
+
+                        <i class="bi bi-person"></i>
+
+                        ${r.name || "Unknown"}
+
+                    </div>
+
+
+                    ${
+                        r.student_id
+                        ?
+                        `
+
+                        <div
+                            class="text-muted small"
+                        >
+
+                            ID: ${r.student_id}
+
+                        </div>
+
+                        `
+                        :
+                        ""
+                    }
+
+
+                    <div class="mt-2">
+
+
+                        <span
+                            class="badge ${badge}"
+                        >
+
+                            ${
+                                r.status ||
+                                "Unknown"
+                            }
+
+                        </span>
+
+
+                        <span
+                            class="text-muted ms-2"
+                        >
+
+                            ${confidence}%
+
+                        </span>
+
+
+                    </div>
+
+
+                </div>
+
+            `;
+
+
+        }).join("");
+
 }
 
 
-/* =========================================================
-   INITIAL PAGE LOAD
-========================================================= */
-
-document.addEventListener(
-    "DOMContentLoaded",
-    function () {
-
-        checkCameraStatus();
-
-    }
-);
 
 
 /* =========================================================
-   CLEANUP WHEN LEAVING PAGE
+   CLEANUP WHEN PAGE CLOSES
 ========================================================= */
 
 window.addEventListener(
+
     "beforeunload",
+
     function () {
 
-        if (pollTimer) {
-
-            clearInterval(pollTimer);
-
-            pollTimer = null;
-
-        }
-
-
-        /*
-         * Close browser MJPEG stream.
-         * Backend camera is not automatically stopped here.
-         */
-
-        const liveFeed =
-            document.getElementById("liveFeed");
-
-
-        if (liveFeed) {
-
-            liveFeed.src = "";
-
-        }
+        stopCamera();
 
     }
+
 );
+
 
 </script>
 

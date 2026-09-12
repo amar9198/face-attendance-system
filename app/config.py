@@ -35,12 +35,19 @@ REPORTS_DIR = os.path.join(BASE_DIR, "reports")
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Camera
 # ---------------------------------------------------------------------------
-CAMERA_INDEX = int(os.environ.get("CAMERA_INDEX", 0))
-CAMERA_FRAME_WIDTH = int(os.environ.get("CAMERA_FRAME_WIDTH", 1280))
-CAMERA_FRAME_HEIGHT = int(os.environ.get("CAMERA_FRAME_HEIGHT", 720))
 
+CAMERA_INDEX = int(os.environ.get("CAMERA_INDEX", 0))
+
+CAMERA_FRAME_WIDTH = int(
+    os.environ.get("CAMERA_FRAME_WIDTH", 640)
+)
+
+CAMERA_FRAME_HEIGHT = int(
+    os.environ.get("CAMERA_FRAME_HEIGHT", 480)
+)
 # ---------------------------------------------------------------------------
 # Face detection (MTCNN)
 # ---------------------------------------------------------------------------
