@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Welcome - Face Attendance System{% endblock %}
+{% block content %}
+<div class="p-5 mb-4 hero-card rounded-4">
+    <h1 class="display-6 fw-bold">Real-Time Face Recognition Attendance System</h1>
+    <p class="lead">MTCNN &rarr; VGGFace &rarr; SVM &rarr; Attendance Database &rarr; Dashboard</p>
+    <p>
+        {% if model_ready %}
+            <span class="badge text-bg-success"><i class="bi bi-check-circle"></i> Recognition model is trained and ready</span>
+        {% else %}
+            <span class="badge text-bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> No trained model yet &mdash; register students and run the training pipeline</span>
+        {% endif %}
+    </p>
+    <div class="d-flex gap-2 mt-3">
+        <a href="{{ url_for('register') }}" class="btn btn-light"><i class="bi bi-person-plus"></i> Register a Student</a>
+        <a href="{{ url_for('live_attendance') }}" class="btn btn-outline-light"><i class="bi bi-camera-video"></i> Start Live Attendance</a>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-light"><i class="bi bi-speedometer2"></i> View Dashboard</a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-3">
+        <div class="card stat-card"><div class="card-body">
+            <div class="stat-value">{{ stats.total_students }}</div>
+            <div class="stat-label">Registered Students</div>
+        </div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card"><div class="card-body">
+            <div class="stat-value text-success">{{ stats.present_today }}</div>
+            <div class="stat-label">Present Today</div>
+        </div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card"><div class="card-body">
+            <div class="stat-value text-danger">{{ stats.absent_today }}</div>
+            <div class="stat-label">Absent Today</div>
+        </div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card"><div class="card-body">
+            <div class="stat-value text-primary">{{ stats.attendance_percentage }}%</div>
+            <div class="stat-label">Attendance Rate</div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-body">
+        <h5 class="card-title"><i class="bi bi-diagram-3"></i> Pipeline</h5>
+        <div class="pipeline-flow">
+            <span class="pipeline-step">Webcam</span>
+            <span class="pipeline-arrow">&rarr;</span>
+            <span class="pipeline-step">MTCNN</span>
+            <span class="pipeline-arrow">&rarr;</span>
+            <span class="pipeline-step">VGGFace</span>
+            <span class="pipeline-arrow">&rarr;</span>
+            <span class="pipeline-step">SVM</span>
+            <span class="pipeline-arrow">&rarr;</span>
+            <span class="pipeline-step">Attendance DB</span>
+            <span class="pipeline-arrow">&rarr;</span>
+            <span class="pipeline-step">Dashboard/Reports</span>
+        </div>
+    </div>
+</div>
+{% endblock %}

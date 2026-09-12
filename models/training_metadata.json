@@ -1,0 +1,19 @@
+{
+  "num_students": 6,
+  "num_images": 151,
+  "students": [
+    "2401660130012",
+    "2401660130013",
+    "2401660130026",
+    "2401660130027",
+    "2401660130044",
+    "2401660300003"
+  ],
+  "train_size": 105,
+  "val_size": 23,
+  "test_size": 23,
+  "validation_accuracy": 1.0,
+  "svm_kernel": "linear",
+  "svm_C": 1.0,
+  "recognition_threshold": 0.55
+}

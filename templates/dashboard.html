@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Face Attendance System{% endblock %}
+{% block content %}
+
+{% if reports_mode %}
+<h2 class="mb-4"><i class="bi bi-file-earmark-spreadsheet"></i> Reports</h2>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-3"><div class="card stat-card"><div class="card-body">
+        <div class="stat-value">{{ stats.total_students }}</div><div class="stat-label">Total Students</div>
+    </div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="card-body">
+        <div class="stat-value text-success">{{ stats.present_today }}</div><div class="stat-label">Present ({{ stats.date }})</div>
+    </div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="card-body">
+        <div class="stat-value text-danger">{{ stats.absent_today }}</div><div class="stat-label">Absent ({{ stats.date }})</div>
+    </div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="card-body">
+        <div class="stat-value text-primary">{{ stats.attendance_percentage }}%</div><div class="stat-label">Attendance %</div>
+    </div></div></div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <h5 class="card-title">Export Attendance Report</h5>
+        <p class="text-muted">Leave fields blank to export all records.</p>
+        <form class="row g-3 align-items-end" method="get" action="#" id="reportForm">
+            <div class="col-md-3">
+                <label class="form-label">Date</label>
+                <input type="date" class="form-control" name="date" id="reportDate">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Student</label>
+                <select class="form-select" name="student_id" id="reportStudent">
+                    <option value="">All students</option>
+                    {% for s in all_students %}
+                    <option value="{{ s.student_id }}">{{ s.student_id }} - {{ s.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+                <button type="button" class="btn btn-success" onclick="exportReport('csv')"><i class="bi bi-filetype-csv"></i> Export CSV</button>
+                <button type="button" class="btn btn-primary" onclick="exportReport('xlsx')"><i class="bi bi-file-earmark-excel"></i> Export Excel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function exportReport(fmt) {
+    const date = document.getElementById('reportDate').value;
+    const student = document.getElementById('reportStudent').value;
+    let url = `/reports/export.${fmt}?`;
+    if (date) url += `date=${date}&`;
+    if (student) url += `student_id=${student}&`;
+    window.location.href = url;
+}
+</script>
+
+{% else %}
+<h2 class="mb-4"><i class="bi bi-speedometer2"></i> Dashboard</h2>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-3"><div class="card stat-card"><div class="card-body">
+        <div class="stat-value">{{ stats.total_students }}</div><div class="stat-label">Total Registered Students</div>
+    </div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="card-body">
+        <div class="stat-value text-success">{{ stats.present_today }}</div><div class="stat-label">Present Today</div>
+    </div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="card-body">
+        <div class="stat-value text-danger">{{ stats.absent_today }}</div><div class="stat-label">Absent Today</div>
+    </div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="card-body">
+        <div class="stat-value text-primary">{{ stats.attendance_percentage }}%</div><div class="stat-label">Attendance Percentage</div>
+    </div></div></div>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-camera-video"></i> Live Camera Status</h5>
+                {% if camera_running %}
+                    <p><span class="badge text-bg-success">Running</span></p>
+                {% else %}
+                    <p><span class="badge text-bg-secondary">Stopped</span></p>
+                {% endif %}
+                {% if model_ready %}
+                    <p><span class="badge text-bg-success">Model Trained</span></p>
+                {% else %}
+                    <p><span class="badge text-bg-warning text-dark">Model NOT Trained</span></p>
+                {% endif %}
+                <a href="{{ url_for('live_attendance') }}" class="btn btn-outline-primary btn-sm mt-2">Open Live Attendance</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-clock-history"></i> Recent Attendance</h5>
+                {% if recent %}
+                <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle">
+                    <thead><tr><th>Student ID</th><th>Name</th><th>Date</th><th>Time</th><th>Status</th><th>Confidence</th></tr></thead>
+                    <tbody>
+                    {% for r in recent %}
+                        <tr>
+                            <td>{{ r.student_id }}</td>
+                            <td>{{ r.name or '—' }}</td>
+                            <td>{{ r.date }}</td>
+                            <td>{{ r.time }}</td>
+                            <td><span class="badge text-bg-success">{{ r.status }}</span></td>
+                            <td>{{ (r.confidence * 100) | round(1) }}%</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No attendance recorded yet.</p>
+                {% endif %}
+                <a href="{{ url_for('attendance_history') }}" class="btn btn-outline-secondary btn-sm">View Full History</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

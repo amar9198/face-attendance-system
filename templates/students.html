@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Students - Face Attendance System{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-people"></i> Registered Students</h2>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-primary" onclick="trainModel()"><i class="bi bi-cpu"></i> Train / Update Model</button>
+        <a href="{{ url_for('register') }}" class="btn btn-success"><i class="bi bi-person-plus"></i> Register Student</a>
+    </div>
+</div>
+
+<div id="trainStatus" class="alert alert-info d-none"></div>
+
+<div class="card">
+    <div class="card-body">
+        {% if students %}
+        <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr><th>Student ID</th><th>Name</th><th>Department</th><th>Email</th><th>Registered On</th><th></th></tr>
+            </thead>
+            <tbody>
+            {% for s in students %}
+                <tr>
+                    <td><strong>{{ s.student_id }}</strong></td>
+                    <td>{{ s.name }}</td>
+                    <td>{{ s.department or '—' }}</td>
+                    <td>{{ s.email or '—' }}</td>
+                    <td>{{ s.created_at }}</td>
+                    <td class="text-end">
+                        <a href="{{ url_for('capture', student_id=s.student_id, name=s.name.replace(' ', '_')) }}" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-camera"></i> Add More Photos
+                        </a>
+                        <form method="post" action="{{ url_for('delete_student', student_id=s.student_id) }}" class="d-inline"
+                              onsubmit="return confirm('Delete {{ s.student_id }} and all their attendance records? This also removes them from the recognition model on next retrain.');">
+                            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">No students registered yet. Click "Register Student" to add the first one.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="alert alert-secondary mt-3">
+    <i class="bi bi-shield-lock"></i>
+    <strong>Privacy reminder:</strong> facial images are biometric data. Make sure students have given informed
+    consent before registering them. See README.md for the full data-protection guidance.
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function trainModel() {
+    const box = document.getElementById('trainStatus');
+    box.classList.remove('d-none', 'alert-danger', 'alert-success');
+    box.classList.add('alert-info');
+    box.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Extracting features and training SVM... this may take a while depending on dataset size.';
+    fetch('/api/train', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                box.classList.remove('alert-info');
+                box.classList.add('alert-success');
+                box.innerHTML = '<i class="bi bi-check-circle"></i> Model trained successfully. Live attendance will use the updated model.';
+            } else {
+                box.classList.remove('alert-info');
+                box.classList.add('alert-danger');
+                box.innerHTML = '<i class="bi bi-x-circle"></i> Training failed at stage: ' + data.stage + '. Check logs/attendance_system.log for details.';
+            }
+        })
+        .catch(() => {
+            box.classList.remove('alert-info');
+            box.classList.add('alert-danger');
+            box.innerHTML = 'Request failed. Is the server running?';
+        });
+}
+</script>
+{% endblock %}

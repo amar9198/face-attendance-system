@@ -1,0 +1,82 @@
+:root {
+    --brand-1: #1f3c88;
+    --brand-2: #2d6cdf;
+}
+
+body {
+    background-color: #f4f6fb;
+}
+
+.app-navbar {
+    background: linear-gradient(90deg, var(--brand-1), var(--brand-2));
+}
+
+.hero-card {
+    background: linear-gradient(120deg, var(--brand-1), var(--brand-2));
+    color: #fff;
+}
+
+.stat-card {
+    border: none;
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 2.1rem;
+    font-weight: 700;
+}
+
+.stat-label {
+    color: #6c757d;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.card {
+    border-radius: 14px;
+    border: none;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.video-frame {
+    
+    max-width: 100%;
+    border: 3px solid #dee2e6;
+    background: #000;
+    min-height: 360px;
+}
+
+.video-placeholder {
+    min-height: 360px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #adb5bd;
+    background: #f1f3f5;
+    border-radius: 10px;
+}
+
+.pipeline-flow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.pipeline-step {
+    background: #eef2ff;
+    color: var(--brand-1);
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.pipeline-arrow {
+    color: #adb5bd;
+    font-weight: 700;
+}

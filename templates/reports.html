@@ -1,0 +1,354 @@
+{% extends "base.html" %}
+
+{% block title %}
+Reports - Face Attendance System
+{% endblock %}
+
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+
+    <div>
+        <h2>
+            <i class="bi bi-file-earmark-bar-graph"></i>
+            Attendance Reports
+        </h2>
+
+        <p class="text-muted mb-0">
+            View and export attendance records.
+        </p>
+    </div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- FILTERS -->
+<!-- ===================================================== -->
+
+<div class="card mb-4">
+
+    <div class="card-body">
+
+        <form class="row g-3 align-items-end" method="get">
+
+
+            <!-- DATE -->
+
+            <div class="col-md-4">
+
+                <label class="form-label">
+                    Date
+                </label>
+
+                <input
+                    type="date"
+                    class="form-control"
+                    name="date"
+                    value="{{ filters.date }}"
+                >
+
+            </div>
+
+
+            <!-- STUDENT -->
+
+            <div class="col-md-4">
+
+                <label class="form-label">
+                    Student
+                </label>
+
+                <select
+                    class="form-select"
+                    name="student_id"
+                >
+
+                    <option value="">
+                        All Students
+                    </option>
+
+                    {% for student in all_students %}
+
+                    <option
+                        value="{{ student.student_id }}"
+
+                        {% if filters.student_id == student.student_id %}
+                        selected
+                        {% endif %}
+                    >
+
+                        {{ student.student_id }}
+                        -
+                        {{ student.name }}
+
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <!-- BUTTONS -->
+
+            <div class="col-md-4 d-flex gap-2">
+
+                <button
+                    type="submit"
+                    class="btn btn-primary"
+                >
+
+                    <i class="bi bi-funnel"></i>
+                    Filter
+
+                </button>
+
+
+                <a
+                    href="{{ url_for('reports') }}"
+                    class="btn btn-outline-secondary"
+                >
+
+                    Reset
+
+                </a>
+
+            </div>
+
+        </form>
+
+    </div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- EXPORT BUTTONS -->
+<!-- ===================================================== -->
+
+<div class="card mb-4">
+
+    <div class="card-body">
+
+        <h5 class="mb-3">
+
+            <i class="bi bi-download"></i>
+            Export Report
+
+        </h5>
+
+
+        <!-- CSV -->
+
+        <a
+            class="btn btn-success me-2"
+            href="{{ url_for(
+                'export_csv',
+                date=filters.date,
+                student_id=filters.student_id
+            ) }}"
+        >
+
+            <i class="bi bi-filetype-csv"></i>
+            Download CSV
+
+        </a>
+
+
+        <!-- EXCEL -->
+
+        <a
+            class="btn btn-success"
+            href="{{ url_for(
+                'export_excel',
+                date=filters.date,
+                student_id=filters.student_id
+            ) }}"
+        >
+
+            <i class="bi bi-file-earmark-excel"></i>
+            Download Excel
+
+        </a>
+
+    </div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- ATTENDANCE RECORDS -->
+<!-- ===================================================== -->
+
+<div class="card">
+
+    <div class="card-body">
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+
+            <h5 class="mb-0">
+
+                <i class="bi bi-table"></i>
+                Attendance Records
+
+            </h5>
+
+
+            <span class="badge text-bg-primary">
+
+                {{ records|length }} Records
+
+            </span>
+
+        </div>
+
+
+        {% if records %}
+
+        <div class="table-responsive">
+
+            <table class="table table-hover align-middle">
+
+
+                <thead>
+
+                    <tr>
+
+                        <th>Student ID</th>
+
+                        <th>Name</th>
+
+                        <th>Date</th>
+
+                        <th>Time</th>
+
+                        <th>Status</th>
+
+                        <th>Confidence</th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    {% for record in records %}
+
+                    <tr>
+
+
+                        <td>
+
+                            <strong>
+
+                                {{ record.student_id }}
+
+                            </strong>
+
+                        </td>
+
+
+                        <td>
+
+                            {{ record.name or "-" }}
+
+                        </td>
+
+
+                        <td>
+
+                            {{ record.date }}
+
+                        </td>
+
+
+                        <td>
+
+                            {{ record.time }}
+
+                        </td>
+
+
+                        <td>
+
+                            {% if record.status == "Present" %}
+
+                            <span class="badge text-bg-success">
+
+                                {{ record.status }}
+
+                            </span>
+
+                            {% else %}
+
+                            <span class="badge text-bg-secondary">
+
+                                {{ record.status }}
+
+                            </span>
+
+                            {% endif %}
+
+                        </td>
+
+
+                        <td>
+
+                            {% if record.confidence is not none %}
+
+                                {{ (record.confidence * 100)|round(1) }}%
+
+                            {% else %}
+
+                                -
+
+                            {% endif %}
+
+                        </td>
+
+
+                    </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+
+            </table>
+
+        </div>
+
+
+        {% else %}
+
+
+        <div class="text-center text-muted py-5">
+
+            <i class="bi bi-file-earmark-x fs-1"></i>
+
+            <h5 class="mt-3">
+                No Attendance Records
+            </h5>
+
+            <p class="mb-0">
+
+                Attendance records will appear here after students
+                are recognized through the live attendance system.
+
+            </p>
+
+        </div>
+
+
+        {% endif %}
+
+    </div>
+
+</div>
+
+
+{% endblock %}
