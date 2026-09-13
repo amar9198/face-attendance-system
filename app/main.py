@@ -1,18 +1,9 @@
+```python
 """
 app/main.py
 -----------
 
 Flask application for the Face Attendance System.
-
-Features:
-- Student registration
-- Face image capture
-- Model training
-- Live face recognition
-- Multiple face recognition
-- Attendance marking
-- Attendance history
-- CSV and Excel reports
 """
 
 import atexit
@@ -24,19 +15,19 @@ import time
 from datetime import datetime
 
 import cv2
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 from flask import (
     Flask,
-    render_template,
-    request,
-    redirect,
-    url_for,
+    Response,
     flash,
     jsonify,
-    Response,
+    redirect,
+    render_template,
+    request,
     send_file,
+    url_for,
 )
 
 
@@ -100,7 +91,6 @@ _registration_detector = FaceDetector()
 
 _latest_results = []
 _results_lock = threading.Lock()
-
 _live_processing_lock = threading.Lock()
 
 
@@ -120,7 +110,6 @@ JPEG_QUALITY = 80
 def get_camera():
     global _camera
 
-    # Reuse existing camera instead of creating it again
     if _camera is not None:
         return _camera
 
@@ -151,17 +140,14 @@ def release_camera():
     global _camera
 
     if _camera is not None:
-
         try:
             logger.info("Releasing camera...")
             _camera.stop()
-
         except Exception as exc:
             logger.warning(
                 "Camera release error: %s",
                 exc
             )
-
         finally:
             _camera = None
 
@@ -177,7 +163,7 @@ database.init_db()
 
 
 # ============================================================
-# RESIZE FRAME FOR AI PROCESSING
+# RESIZE FRAME
 # ============================================================
 
 def resize_for_processing(frame):
@@ -209,7 +195,7 @@ def resize_for_processing(frame):
 # ============================================================
 
 @app.errorhandler(404)
-def not_found(_error):
+def not_found(error):
 
     return render_template(
         "error.html",
@@ -219,7 +205,11 @@ def not_found(_error):
 
 @app.errorhandler(500)
 def server_error(error):
-    logger.error("Server error: %s", error)
+
+    logger.error(
+        "Server error: %s",
+        error
+    )
 
     return render_template(
         "error.html",
@@ -228,7 +218,7 @@ def server_error(error):
 
 
 # ============================================================
-# DASHBOARD
+# HOME PAGE
 # ============================================================
 
 @app.route("/")
@@ -237,8 +227,11 @@ def index():
     stats = database.get_dashboard_stats()
 
     try:
-        model_ready = get_pipeline().recognizer.is_trained
-
+        model_ready = (
+            get_pipeline()
+            .recognizer
+            .is_trained
+        )
     except Exception:
         model_ready = False
 
@@ -248,6 +241,10 @@ def index():
         model_ready=model_ready,
     )
 
+
+# ============================================================
+# DASHBOARD
+# ============================================================
 
 @app.route("/dashboard")
 def dashboard():
@@ -262,8 +259,11 @@ def dashboard():
     )
 
     try:
-        model_ready = get_pipeline().recognizer.is_trained
-
+        model_ready = (
+            get_pipeline()
+            .recognizer
+            .is_trained
+        )
     except Exception:
         model_ready = False
 
@@ -291,6 +291,161 @@ def students():
     )
 
 
+# ============================================================
+# STUDENT REGISTRATION
+# ============================================================
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+
+    if request.method == "POST":
+
+        try:
+
+            student_id = sanitize_student_id(
+                request.form.get("student_id", "")
+            )
+
+            name = sanitize_name(
+                request.form.get("name", "")
+            )
+
+            department = request.form.get(
+                "department",
+                ""
+            ).strip()
+
+            email = request.form.get(
+                "email",
+                ""
+            ).strip()
+
+            if not student_id:
+                flash(
+                    "Student ID is required.",
+                    "danger"
+                )
+                return redirect(
+                    url_for("register")
+                )
+
+            if not name:
+                flash(
+                    "Student name is required.",
+                    "danger"
+                )
+                return redirect(
+                    url_for("register")
+                )
+
+            # Check duplicate student
+            existing_student = database.get_student(
+                student_id
+            )
+
+            if existing_student is not None:
+                flash(
+                    f"Student {student_id} already exists.",
+                    "warning"
+                )
+                return redirect(
+                    url_for("register")
+                )
+
+            # ------------------------------------------------
+            # SAVE STUDENT
+            # ------------------------------------------------
+
+            student_data = {
+                "student_id": student_id,
+                "name": name,
+                "department": department,
+                "email": email,
+                "registered_at": datetime.now().strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
+            }
+
+            # Try dictionary-based database function first
+            try:
+                database.add_student(student_data)
+
+            except TypeError:
+
+                # Support database functions that accept arguments
+                database.add_student(
+                    student_id,
+                    name,
+                    department,
+                    email
+                )
+
+            logger.info(
+                "Student registered successfully: %s",
+                student_id
+            )
+
+            flash(
+                "Student registered successfully. "
+                "Now capture face images.",
+                "success"
+            )
+
+            return redirect(
+                url_for(
+                    "capture",
+                    student_id=student_id
+                )
+            )
+
+        except Exception as exc:
+
+            logger.exception(
+                "Student registration failed"
+            )
+
+            flash(
+                f"Registration failed: {str(exc)}",
+                "danger"
+            )
+
+            return redirect(
+                url_for("register")
+            )
+
+    return render_template("register.html")
+
+
+# ============================================================
+# FACE CAPTURE PAGE
+# ============================================================
+
+@app.route("/capture/<student_id>")
+def capture(student_id):
+
+    student = database.get_student(student_id)
+
+    if student is None:
+
+        flash(
+            "Student not found.",
+            "danger"
+        )
+
+        return redirect(
+            url_for("students")
+        )
+
+    return render_template(
+        "capture.html",
+        student=student
+    )
+
+
+# ============================================================
+# API FACE CAPTURE
+# ============================================================
+
 @app.route(
     "/api/capture/<student_id>",
     methods=["POST"]
@@ -299,53 +454,40 @@ def api_capture(student_id):
 
     try:
 
-        # ----------------------------------------------------
-        # CHECK STUDENT
-        # ----------------------------------------------------
-
         student = database.get_student(student_id)
 
-        logger.info(
-            "Capture request received for student_id=%s, student=%s",
-            student_id,
-            student
-        )
-
         if student is None:
-
-            logger.warning(
-                "Student not found during capture: %s",
-                student_id
-            )
 
             return jsonify({
                 "success": False,
                 "message": (
-                    f"Student {student_id} not found. "
-                    "Please register the student again."
+                    f"Student {student_id} not found."
                 )
             }), 404
 
-
         # ----------------------------------------------------
-        # GET FOLDER NAME
+        # FOLDER NAME
         # ----------------------------------------------------
 
-        folder_name = request.form.get("folder_name")
+        folder_name = request.form.get(
+            "folder_name"
+        )
 
         if not folder_name:
 
-            student_name = student.get("name", "Unknown")
-
-            folder_name = (
-                f"{student_id}_"
-                f"{student_name.replace(' ', '_')}"
+            student_name = student.get(
+                "name",
+                "Unknown"
             )
 
+            safe_name = student_name.replace(
+                " ",
+                "_"
+            )
 
-        # ----------------------------------------------------
-        # CREATE DATASET FOLDER
-        # ----------------------------------------------------
+            folder_name = (
+                f"{student_id}_{safe_name}"
+            )
 
         folder_path = os.path.join(
             config.DATASET_PATH,
@@ -357,32 +499,20 @@ def api_capture(student_id):
             exist_ok=True
         )
 
-
         # ----------------------------------------------------
-        # GET IMAGE FROM BROWSER
+        # GET IMAGE
         # ----------------------------------------------------
 
         if "image" not in request.files:
-
-            logger.warning(
-                "No image received for student: %s",
-                student_id
-            )
 
             return jsonify({
                 "success": False,
                 "message": "No image received from camera."
             }), 400
 
-
         image_file = request.files["image"]
 
         image_bytes = image_file.read()
-
-
-        # ----------------------------------------------------
-        # CONVERT IMAGE TO OPENCV FRAME
-        # ----------------------------------------------------
 
         np_array = np.frombuffer(
             image_bytes,
@@ -394,33 +524,20 @@ def api_capture(student_id):
             cv2.IMREAD_COLOR
         )
 
-
         if frame is None:
-
-            logger.warning(
-                "Invalid camera image for student: %s",
-                student_id
-            )
 
             return jsonify({
                 "success": False,
                 "message": "Invalid camera image."
             }), 400
 
-
         # ----------------------------------------------------
         # DETECT FACE
         # ----------------------------------------------------
 
-        logger.info(
-            "Detecting face for student: %s",
-            student_id
-        )
-
         face = _registration_detector.detect_largest(
             frame
         )
-
 
         if face is None:
 
@@ -432,7 +549,6 @@ def api_capture(student_id):
                 )
             })
 
-
         # ----------------------------------------------------
         # CROP FACE
         # ----------------------------------------------------
@@ -442,7 +558,6 @@ def api_capture(student_id):
             face
         )
 
-
         if crop is None:
 
             return jsonify({
@@ -450,9 +565,8 @@ def api_capture(student_id):
                 "message": "Could not crop detected face."
             })
 
-
         # ----------------------------------------------------
-        # RESIZE FACE
+        # RESIZE
         # ----------------------------------------------------
 
         crop_resized = cv2.resize(
@@ -461,24 +575,18 @@ def api_capture(student_id):
             interpolation=cv2.INTER_AREA
         )
 
-
         # ----------------------------------------------------
-        # COUNT EXISTING IMAGES
+        # COUNT IMAGES
         # ----------------------------------------------------
 
         existing = [
-
             f for f in os.listdir(folder_path)
-
             if f.lower().endswith(
                 (".jpg", ".jpeg", ".png")
             )
-
         ]
 
-
         next_index = len(existing) + 1
-
 
         # ----------------------------------------------------
         # SAVE IMAGE
@@ -491,42 +599,29 @@ def api_capture(student_id):
             filename
         )
 
-
         success = cv2.imwrite(
             output_path,
             crop_resized
         )
 
-
         if not success:
-
-            logger.error(
-                "Could not save image: %s",
-                output_path
-            )
 
             return jsonify({
                 "success": False,
                 "message": "Could not save captured image."
             }), 500
 
-
-        # ----------------------------------------------------
-        # CHECK COMPLETION
-        # ----------------------------------------------------
-
         done = (
-            next_index >= config.NUM_COLLECTION_IMAGES
+            next_index
+            >= config.NUM_COLLECTION_IMAGES
         )
 
-
         logger.info(
-            "Image captured successfully: %s (%s/%s)",
+            "Image captured: %s (%s/%s)",
             student_id,
             next_index,
             config.NUM_COLLECTION_IMAGES
         )
-
 
         return jsonify({
 
@@ -534,17 +629,16 @@ def api_capture(student_id):
 
             "count": next_index,
 
-            "target": config.NUM_COLLECTION_IMAGES,
+            "target":
+                config.NUM_COLLECTION_IMAGES,
 
             "done": done,
 
-            "message": (
+            "message":
                 f"Captured {next_index}/"
                 f"{config.NUM_COLLECTION_IMAGES}"
-            )
 
         })
-
 
     except Exception as exc:
 
@@ -553,13 +647,10 @@ def api_capture(student_id):
         )
 
         return jsonify({
-
             "success": False,
-
             "message": str(exc)
-
         }), 500
-   
+
 
 # ============================================================
 # MODEL TRAINING
@@ -580,7 +671,6 @@ def api_train():
     try:
 
         extract = subprocess.run(
-
             [
                 python_exe,
                 os.path.join(
@@ -589,15 +679,10 @@ def api_train():
                     "extract_features.py"
                 )
             ],
-
             cwd=PROJECT_ROOT,
-
             capture_output=True,
-
             text=True,
-
             timeout=3600,
-
         )
 
         if extract.returncode != 0:
@@ -608,19 +693,12 @@ def api_train():
             )
 
             return jsonify({
-
                 "success": False,
-
-                "stage":
-                    "extract_features",
-
-                "log":
-                    extract.stderr[-4000:]
-
+                "stage": "extract_features",
+                "log": extract.stderr[-4000:]
             }), 500
 
         train = subprocess.run(
-
             [
                 python_exe,
                 os.path.join(
@@ -629,15 +707,10 @@ def api_train():
                     "train_model.py"
                 )
             ],
-
             cwd=PROJECT_ROOT,
-
             capture_output=True,
-
             text=True,
-
             timeout=3600,
-
         )
 
         if train.returncode != 0:
@@ -648,41 +721,25 @@ def api_train():
             )
 
             return jsonify({
-
                 "success": False,
-
-                "stage":
-                    "train_model",
-
-                "log":
-                    train.stderr[-4000:]
-
+                "stage": "train_model",
+                "log": train.stderr[-4000:]
             }), 500
 
     except subprocess.TimeoutExpired:
 
         return jsonify({
-
             "success": False,
-
-            "message":
-                "Training timed out."
-
+            "message": "Training timed out."
         }), 500
 
     except Exception as exc:
 
-        logger.exception(
-            "Training failed"
-        )
+        logger.exception("Training failed")
 
         return jsonify({
-
             "success": False,
-
-            "message":
-                str(exc)
-
+            "message": str(exc)
         }), 500
 
     _pipeline = None
@@ -724,13 +781,10 @@ def live_attendance():
     )
 
     return render_template(
-
         "attendance.html",
-
         model_ready=model_ready,
-
         camera_running=camera_running,
-
+        history_mode=False,
     )
 
 
@@ -757,18 +811,9 @@ def api_camera_start():
 
     except CameraUnavailableError as exc:
 
-        logger.error(
-            "Camera unavailable: %s",
-            exc
-        )
-
         return jsonify({
-
             "success": False,
-
-            "message":
-                str(exc)
-
+            "message": str(exc)
         }), 503
 
     except Exception as exc:
@@ -778,12 +823,8 @@ def api_camera_start():
         )
 
         return jsonify({
-
             "success": False,
-
-            "message":
-                str(exc)
-
+            "message": str(exc)
         }), 500
 
 
@@ -802,12 +843,7 @@ def api_camera_stop():
     with _results_lock:
         _latest_results = []
 
-    # Release physical webcam
     release_camera()
-
-    logger.info(
-        "Camera closed by user."
-    )
 
     return jsonify({
         "success": True,
@@ -841,11 +877,9 @@ def api_camera_status():
 
     return jsonify({
 
-        "camera_running":
-            camera_running,
+        "camera_running": camera_running,
 
-        "model_ready":
-            model_ready,
+        "model_ready": model_ready,
 
     })
 
@@ -858,15 +892,12 @@ def _gen_live_stream():
 
     global _latest_results
 
-    # Do NOT create or start the camera here.
-    # Camera must be started explicitly using /api/camera/start.
-
     cam = _camera
 
     if cam is None or not cam.is_running:
 
         logger.info(
-            "Live stream requested but camera is not running."
+            "Camera is not running."
         )
 
         return
@@ -905,19 +936,16 @@ def _gen_live_stream():
         frame_counter += 1
 
         should_process = (
-
             frame_counter % FRAME_SKIP == 0
-
             or last_display_frame is None
-
         )
 
         if should_process:
 
             try:
 
-                small_frame, scale = resize_for_processing(
-                    frame
+                small_frame, scale = (
+                    resize_for_processing(frame)
                 )
 
                 with _live_processing_lock:
@@ -931,39 +959,30 @@ def _gen_live_stream():
                 if scale != 1.0:
 
                     annotated = cv2.resize(
-
                         annotated_small,
-
                         (
                             frame.shape[1],
                             frame.shape[0]
                         ),
-
                         interpolation=cv2.INTER_LINEAR
-
                     )
 
                 else:
 
                     annotated = annotated_small
 
-
                 last_display_frame = annotated
-
 
                 with _results_lock:
 
                     _latest_results = results or []
-
 
             except ModelNotTrainedError:
 
                 last_display_frame = frame.copy()
 
                 with _results_lock:
-
                     _latest_results = []
-
 
             except Exception as exc:
 
@@ -974,48 +993,30 @@ def _gen_live_stream():
 
                 last_display_frame = frame.copy()
 
-
         display_frame = (
-
             last_display_frame
-
             if last_display_frame is not None
-
             else frame
-
         )
 
-
         ok, buffer = cv2.imencode(
-
             ".jpg",
-
             display_frame,
-
             [
                 cv2.IMWRITE_JPEG_QUALITY,
                 JPEG_QUALITY
             ]
-
         )
 
         if not ok:
-
             continue
 
-
         yield (
-
             b"--frame\r\n"
-
             b"Content-Type: image/jpeg\r\n\r\n"
-
             + buffer.tobytes()
-
             + b"\r\n"
-
         )
-
 
     logger.info(
         "Live recognition stream ended."
@@ -1030,17 +1031,11 @@ def _gen_live_stream():
 def video_feed_live():
 
     return Response(
-
         _gen_live_stream(),
-
         mimetype=(
-
             "multipart/x-mixed-replace; "
-
             "boundary=frame"
-
         ),
-
     )
 
 
@@ -1053,17 +1048,12 @@ def api_live_results():
 
     with _results_lock:
 
-        results = list(
-            _latest_results
-        )
+        results = list(_latest_results)
 
     return jsonify({
         "results": results
     })
 
-# ============================================================
-# BROWSER CAMERA RECOGNITION
-# ============================================================
 
 # ============================================================
 # BROWSER CAMERA RECOGNITION
@@ -1077,32 +1067,27 @@ def recognize_frame():
 
     try:
 
-        # Accept the field sent by attendance.html
         if "frame" not in request.files:
 
             return jsonify({
                 "success": False,
-                "message": "No frame received from browser."
+                "message":
+                    "No frame received from browser."
             }), 400
-
 
         image_file = request.files["frame"]
 
         image_bytes = image_file.read()
 
-
-        # Convert bytes to OpenCV image
         np_array = np.frombuffer(
             image_bytes,
             np.uint8
         )
 
-
         frame = cv2.imdecode(
             np_array,
             cv2.IMREAD_COLOR
         )
-
 
         if frame is None:
 
@@ -1111,37 +1096,23 @@ def recognize_frame():
                 "message": "Invalid camera frame."
             }), 400
 
-
-        # Load recognition pipeline
         pipeline = get_pipeline()
 
-
-        # Process frame
-        annotated_frame, results = (
-            pipeline.process_frame(frame)
-        )
-
+        _, results = pipeline.process_frame(frame)
 
         return jsonify({
-
             "success": True,
-
             "results": results or []
-
         })
-
 
     except ModelNotTrainedError:
 
         return jsonify({
-
             "success": False,
-
             "message":
-                "Model is not trained. Please train the model first."
-
+                "Model is not trained. "
+                "Please train the model first."
         }), 400
-
 
     except Exception as exc:
 
@@ -1149,14 +1120,12 @@ def recognize_frame():
             "Browser recognition error"
         )
 
-
         return jsonify({
-
             "success": False,
-
             "message": str(exc)
-
         }), 500
+
+
 # ============================================================
 # ATTENDANCE HISTORY
 # ============================================================
@@ -1189,13 +1158,9 @@ def attendance_history():
     )
 
     records = database.get_attendance(
-
         date_str=date_filter,
-
         student_id=student_filter,
-
         status=status_filter,
-
     )
 
     all_students = (
@@ -1203,28 +1168,16 @@ def attendance_history():
     )
 
     return render_template(
-
         "attendance.html",
-
         history_mode=True,
-
         records=records,
-
         all_students=all_students,
-
         filters={
-
-            "date":
-                date_filter or "",
-
+            "date": date_filter or "",
             "student_id":
                 student_filter or "",
-
-            "status":
-                status_filter or "",
-
+            "status": status_filter or "",
         },
-
     )
 
 
@@ -1238,11 +1191,8 @@ def _attendance_dataframe(
 ):
 
     records = database.get_attendance(
-
         date_str=date_str,
-
         student_id=student_id
-
     )
 
     df = pd.DataFrame(records)
@@ -1250,75 +1200,40 @@ def _attendance_dataframe(
     if df.empty:
 
         df = pd.DataFrame(
-
             columns=[
-
                 "student_id",
-
                 "name",
-
                 "date",
-
                 "time",
-
                 "status",
-
                 "confidence",
-
             ]
-
         )
 
     df = df.rename(
-
         columns={
-
-            "student_id":
-                "Student ID",
-
-            "name":
-                "Student Name",
-
-            "date":
-                "Date",
-
-            "time":
-                "Time",
-
-            "status":
-                "Status",
-
-            "confidence":
-                "Confidence",
-
+            "student_id": "Student ID",
+            "name": "Student Name",
+            "date": "Date",
+            "time": "Time",
+            "status": "Status",
+            "confidence": "Confidence",
         }
-
     )
 
     columns = [
-
         "Student ID",
-
         "Student Name",
-
         "Date",
-
         "Time",
-
         "Status",
-
         "Confidence",
-
     ]
 
     available_columns = [
-
         column
-
         for column in columns
-
         if column in df.columns
-
     ]
 
     return df[available_columns]
@@ -1360,7 +1275,8 @@ def reports():
         all_students=all_students,
         filters={
             "date": date_filter or "",
-            "student_id": student_filter or "",
+            "student_id":
+                student_filter or "",
         }
     )
 
@@ -1372,10 +1288,7 @@ def reports():
 @app.route("/reports/export.csv")
 def export_csv():
 
-    date_str = (
-        request.args.get("date")
-        or None
-    )
+    date_str = request.args.get("date") or None
 
     student_id = (
         request.args.get("student_id")
@@ -1424,10 +1337,7 @@ def export_csv():
 @app.route("/reports/export.xlsx")
 def export_excel():
 
-    date_str = (
-        request.args.get("date")
-        or None
-    )
+    date_str = request.args.get("date") or None
 
     student_id = (
         request.args.get("student_id")
@@ -1471,59 +1381,35 @@ def export_excel():
         )
 
         summary = pd.DataFrame([
-
             {
-
-                "Metric":
-                    "Total Students",
-
-                "Value":
-                    stats.get(
-                        "total_students",
-                        0
-                    )
-
+                "Metric": "Total Students",
+                "Value": stats.get(
+                    "total_students",
+                    0
+                )
             },
-
             {
-
-                "Metric":
-                    "Present Today",
-
-                "Value":
-                    stats.get(
-                        "present_today",
-                        0
-                    )
-
+                "Metric": "Present Today",
+                "Value": stats.get(
+                    "present_today",
+                    0
+                )
             },
-
             {
-
-                "Metric":
-                    "Absent Today",
-
-                "Value":
-                    stats.get(
-                        "absent_today",
-                        0
-                    )
-
+                "Metric": "Absent Today",
+                "Value": stats.get(
+                    "absent_today",
+                    0
+                )
             },
-
             {
-
                 "Metric":
                     "Attendance Percentage",
-
-                "Value":
-                    stats.get(
-                        "attendance_percentage",
-                        0
-                    )
-
+                "Value": stats.get(
+                    "attendance_percentage",
+                    0
+                )
             },
-
         ])
 
         summary.to_excel(
@@ -1552,17 +1438,11 @@ if __name__ == "__main__":
     try:
 
         app.run(
-
             host=config.FLASK_HOST,
-
             port=config.FLASK_PORT,
-
             debug=config.FLASK_DEBUG,
-
             threaded=True,
-
             use_reloader=False,
-
         )
 
     finally:
