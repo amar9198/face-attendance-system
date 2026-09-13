@@ -1,4 +1,3 @@
-```python
 """
 app/main.py
 -----------
@@ -1448,3 +1447,5 @@ if __name__ == "__main__":
     finally:
 
         release_camera()
+
+"""        
