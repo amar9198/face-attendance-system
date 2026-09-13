@@ -467,130 +467,9 @@ def capture(student_id):
     )
 
 
-# ============================================================
-# REGISTRATION CAMERA STREAM
-# ============================================================
-
-def _gen_registration_stream(student_id, folder_name):
-
-    try:
-        cam = get_camera()
-
-        if not cam.is_running:
-            cam.start()
-
-    except CameraUnavailableError as exc:
-
-        logger.error(
-            "Camera unavailable: %s",
-            exc
-        )
-
-        return
-
-    while cam.is_running:
-
-        frame = cam.read()
-
-        if frame is None:
-
-            time.sleep(0.01)
-            continue
-
-        annotated = frame.copy()
-
-        try:
-
-            face = _registration_detector.detect_largest(
-                frame
-            )
-
-        except Exception as exc:
-
-            logger.warning(
-                "Face detection error: %s",
-                exc
-            )
-
-            face = None
-
-        if face is not None:
-
-            x, y, w, h = face.box
-
-            cv2.rectangle(
-                annotated,
-                (x, y),
-                (x + w, y + h),
-                (0, 200, 0),
-                2
-            )
-
-            cv2.putText(
-                annotated,
-                "Face detected",
-                (x, max(y - 10, 20)),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (0, 200, 0),
-                2
-            )
-
-        else:
-
-            cv2.putText(
-                annotated,
-                "No face detected",
-                (20, 40),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                (0, 0, 255),
-                2
-            )
-
-        ok, buffer = cv2.imencode(
-            ".jpg",
-            annotated,
-            [
-                cv2.IMWRITE_JPEG_QUALITY,
-                JPEG_QUALITY
-            ]
-        )
-
-        if not ok:
-            continue
-
-        yield (
-            b"--frame\r\n"
-            b"Content-Type: image/jpeg\r\n\r\n"
-            + buffer.tobytes()
-            + b"\r\n"
-        )
-
-@app.route(
-    "/video_feed/register/<student_id>"
-)
-def video_feed_register(student_id):
-
-    folder_name = request.args.get(
-        "folder",
-        student_id
-    )
-
-    return Response(
-        _gen_registration_stream(
-            student_id,
-            folder_name
-        ),
-        mimetype=(
-            "multipart/x-mixed-replace; "
-            "boundary=frame"
-        ),
-    )
-
 
 # ============================================================
-# CAPTURE FACE IMAGE
+# CAPTURE FACE IMAGE FROM BROWSER CAMERA
 # ============================================================
 
 @app.route(
@@ -599,127 +478,217 @@ def video_feed_register(student_id):
 )
 def api_capture(student_id):
 
-    data = request.get_json(
-        silent=True
-    ) or {}
+    try:
 
-    folder_name = data.get("folder_name")
+        # ----------------------------------------------------
+        # CHECK STUDENT
+        # ----------------------------------------------------
 
-    if not folder_name:
+        student = database.get_student(student_id)
 
-        return jsonify({
-            "success": False,
-            "message": "Dataset folder missing."
-        }), 400
-
-    folder_path = os.path.join(
-        config.DATASET_PATH,
-        folder_name
-    )
-
-    os.makedirs(
-        folder_path,
-        exist_ok=True
-    )
-
-    cam = get_camera()
-
-    if not cam.is_running:
-
-        try:
-            cam.start()
-
-        except CameraUnavailableError as exc:
+        if student is None:
 
             return jsonify({
                 "success": False,
-                "message": str(exc)
-            }), 503
+                "message": "Student not found."
+            }), 404
 
-    frame = cam.read()
 
-    if frame is None:
+        # ----------------------------------------------------
+        # GET FOLDER NAME
+        # ----------------------------------------------------
+
+        folder_name = request.form.get("folder_name")
+
+        if not folder_name:
+
+            folder_name = f"{student_id}_{student['name'].replace(' ', '_')}"
+
+
+        folder_path = os.path.join(
+            config.DATASET_PATH,
+            folder_name
+        )
+
+        os.makedirs(
+            folder_path,
+            exist_ok=True
+        )
+
+
+        # ----------------------------------------------------
+        # GET IMAGE FROM BROWSER
+        # ----------------------------------------------------
+
+        if "image" not in request.files:
+
+            return jsonify({
+                "success": False,
+                "message": "No image received from camera."
+            }), 400
+
+
+        image_file = request.files["image"]
+
+        image_bytes = image_file.read()
+
+
+        # ----------------------------------------------------
+        # CONVERT IMAGE TO OPENCV FRAME
+        # ----------------------------------------------------
+
+        np_array = np.frombuffer(
+            image_bytes,
+            np.uint8
+        )
+
+
+        frame = cv2.imdecode(
+            np_array,
+            cv2.IMREAD_COLOR
+        )
+
+
+        if frame is None:
+
+            return jsonify({
+                "success": False,
+                "message": "Invalid camera image."
+            }), 400
+
+
+        # ----------------------------------------------------
+        # DETECT FACE
+        # ----------------------------------------------------
+
+        face = _registration_detector.detect_largest(
+            frame
+        )
+
+
+        if face is None:
+
+            return jsonify({
+                "success": False,
+                "message": "No face detected. Please look at the camera."
+            })
+
+
+        # ----------------------------------------------------
+        # CROP FACE
+        # ----------------------------------------------------
+
+        crop = _registration_detector.crop_face(
+            frame,
+            face
+        )
+
+
+        if crop is None:
+
+            return jsonify({
+                "success": False,
+                "message": "Could not crop detected face."
+            })
+
+
+        # ----------------------------------------------------
+        # RESIZE FACE
+        # ----------------------------------------------------
+
+        crop_resized = cv2.resize(
+            crop,
+            config.IMAGE_SIZE,
+            interpolation=cv2.INTER_AREA
+        )
+
+
+        # ----------------------------------------------------
+        # COUNT EXISTING IMAGES
+        # ----------------------------------------------------
+
+        existing = [
+
+            f for f in os.listdir(folder_path)
+
+            if f.lower().endswith(
+                (".jpg", ".jpeg", ".png")
+            )
+
+        ]
+
+
+        next_index = len(existing) + 1
+
+
+        # ----------------------------------------------------
+        # SAVE IMAGE
+        # ----------------------------------------------------
+
+        filename = f"{next_index:03d}.jpg"
+
+
+        output_path = os.path.join(
+            folder_path,
+            filename
+        )
+
+
+        success = cv2.imwrite(
+            output_path,
+            crop_resized
+        )
+
+
+        if not success:
+
+            return jsonify({
+                "success": False,
+                "message": "Could not save captured image."
+            }), 500
+
+
+        # ----------------------------------------------------
+        # CHECK COMPLETION
+        # ----------------------------------------------------
+
+        done = (
+            next_index >= config.NUM_COLLECTION_IMAGES
+        )
+
 
         return jsonify({
-            "success": False,
-            "message": "Camera not ready. Please wait."
-        }), 503
 
-    face = _registration_detector.detect_largest(
-        frame
-    )
+            "success": True,
 
-    if face is None:
+            "count": next_index,
 
-        return jsonify({
-            "success": False,
-            "message": "No face detected. Please face the camera."
+            "target": config.NUM_COLLECTION_IMAGES,
+
+            "done": done,
+
+            "message":
+                f"Captured {next_index}/"
+                f"{config.NUM_COLLECTION_IMAGES}"
+
         })
 
-    crop = _registration_detector.crop_face(
-        frame,
-        face
-    )
 
-    if crop is None:
+    except Exception as exc:
 
-        return jsonify({
-            "success": False,
-            "message": "Invalid face crop."
-        })
+        logger.exception(
+            "Browser face capture error"
+        )
 
-    crop_resized = cv2.resize(
-        crop,
-        config.IMAGE_SIZE,
-        interpolation=cv2.INTER_AREA
-    )
-
-    existing = [
-        f for f in os.listdir(folder_path)
-        if f.lower().endswith(".jpg")
-    ]
-
-    next_index = len(existing) + 1
-
-    filename = f"{next_index:03d}.jpg"
-
-    output_path = os.path.join(
-        folder_path,
-        filename
-    )
-
-    success = cv2.imwrite(
-        output_path,
-        crop_resized
-    )
-
-    if not success:
 
         return jsonify({
+
             "success": False,
-            "message": "Could not save image."
+
+            "message": str(exc)
+
         }), 500
-
-    done = (
-        next_index >= config.NUM_COLLECTION_IMAGES
-    )
-
-    return jsonify({
-
-        "success": True,
-
-        "count": next_index,
-
-        "target": config.NUM_COLLECTION_IMAGES,
-
-        "done": done,
-
-        "message":
-            f"Captured {next_index}/"
-            f"{config.NUM_COLLECTION_IMAGES}",
-
-    })
-
+   
 
 # ============================================================
 # MODEL TRAINING
@@ -1225,6 +1194,10 @@ def api_live_results():
 # BROWSER CAMERA RECOGNITION
 # ============================================================
 
+# ============================================================
+# BROWSER CAMERA RECOGNITION
+# ============================================================
+
 @app.route(
     "/api/recognize-frame",
     methods=["POST"]
@@ -1233,22 +1206,21 @@ def recognize_frame():
 
     try:
 
-        if "image" not in request.files:
+        # Accept the field sent by attendance.html
+        if "frame" not in request.files:
 
             return jsonify({
-
                 "success": False,
-
-                "message": "No image received."
-
+                "message": "No frame received from browser."
             }), 400
 
 
-        image_file = request.files["image"]
+        image_file = request.files["frame"]
 
         image_bytes = image_file.read()
 
 
+        # Convert bytes to OpenCV image
         np_array = np.frombuffer(
             image_bytes,
             np.uint8
@@ -1256,28 +1228,24 @@ def recognize_frame():
 
 
         frame = cv2.imdecode(
-
             np_array,
-
             cv2.IMREAD_COLOR
-
         )
 
 
         if frame is None:
 
             return jsonify({
-
                 "success": False,
-
-                "message": "Invalid image."
-
+                "message": "Invalid camera frame."
             }), 400
 
 
+        # Load recognition pipeline
         pipeline = get_pipeline()
 
 
+        # Process frame
         annotated_frame, results = (
             pipeline.process_frame(frame)
         )
@@ -1290,6 +1258,18 @@ def recognize_frame():
             "results": results or []
 
         })
+
+
+    except ModelNotTrainedError:
+
+        return jsonify({
+
+            "success": False,
+
+            "message":
+                "Model is not trained. Please train the model first."
+
+        }), 400
 
 
     except Exception as exc:

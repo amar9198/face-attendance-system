@@ -1,125 +1,736 @@
 {% extends "base.html" %}
-{% block title %}Register Student - Face Attendance System{% endblock %}
+
+{% block title %}
+Register Student - Face Attendance System
+{% endblock %}
+
+
 {% block content %}
 
+
 {% if capture_mode %}
-<h2 class="mb-4"><i class="bi bi-camera"></i> Capture Face Images: {{ name }} ({{ student_id }})</h2>
+
+<h2 class="mb-4">
+    <i class="bi bi-camera"></i>
+    Capture Face Images: {{ name }} ({{ student_id }})
+</h2>
 
 <div class="row g-4">
+
+    <!-- CAMERA -->
     <div class="col-md-7">
+
         <div class="card">
+
             <div class="card-body text-center">
-                <img id="regFeed" src="{{ url_for('video_feed_register', student_id=student_id, folder=folder_name) }}"
-                     class="img-fluid rounded video-frame" alt="camera feed">
-            </div>
-        </div>
-    </div>
-    <div class="col-md-5">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Instructions</h5>
-                <ul class="small">
-                    <li>Face the camera directly, then turn slightly left / right / up / down between captures.</li>
-                    <li>Vary your expression slightly (neutral, smiling).</li>
-                    <li>Make sure your face is well lit and the whole face fits in the box.</li>
-                    <li>Click <strong>Capture Photo</strong> repeatedly until {{ target_count }} images are collected.</li>
-                </ul>
-                <div class="progress mb-3" style="height: 24px;">
-                    <div id="captureProgress" class="progress-bar bg-success" role="progressbar"
-                         style="width: {{ (existing_count / target_count * 100) | round }}%">
-                        {{ existing_count }} / {{ target_count }}
-                    </div>
+
+                <video
+                    id="camera"
+                    autoplay
+                    playsinline
+                    class="img-fluid rounded video-frame"
+                    style="width:100%; max-height:500px; background:black;">
+                </video>
+
+                <canvas
+                    id="captureCanvas"
+                    style="display:none;">
+                </canvas>
+
+                <div class="mt-3">
+
+                    <button
+                        id="startCameraBtn"
+                        class="btn btn-success"
+                        onclick="startCamera()">
+
+                        <i class="bi bi-camera-video-fill"></i>
+                        Start Camera
+
+                    </button>
+
                 </div>
-                <button id="captureBtn" class="btn btn-primary w-100" onclick="captureImage()">
-                    <i class="bi bi-camera-fill"></i> Capture Photo
-                </button>
-                <div id="captureMsg" class="mt-3 small text-muted"></div>
-                <a href="{{ url_for('students') }}" id="doneBtn" class="btn btn-success w-100 mt-2 d-none">
-                    <i class="bi bi-check-circle"></i> Done &mdash; Go to Students
-                </a>
+
             </div>
+
         </div>
-        <div class="alert alert-secondary mt-3 small">
-            <i class="bi bi-info-circle"></i> After capturing images, go to <strong>Students</strong> and click
-            <strong>Train / Update Model</strong> so this student can be recognized live.
-        </div>
+
     </div>
+
+
+    <!-- INSTRUCTIONS -->
+    <div class="col-md-5">
+
+        <div class="card">
+
+            <div class="card-body">
+
+                <h5 class="card-title">
+                    Instructions
+                </h5>
+
+                <ul class="small">
+
+                    <li>
+                        Click <strong>Start Camera</strong>.
+                    </li>
+
+                    <li>
+                        Allow browser camera permission.
+                    </li>
+
+                    <li>
+                        Face the camera directly.
+                    </li>
+
+                    <li>
+                        Turn slightly left, right, up and down between captures.
+                    </li>
+
+                    <li>
+                        Click Capture Photo until
+                        {{ target_count }} images are collected.
+                    </li>
+
+                </ul>
+
+
+                <!-- PROGRESS -->
+
+                <div
+                    class="progress mb-3"
+                    style="height:24px;">
+
+                    <div
+                        id="captureProgress"
+                        class="progress-bar bg-success"
+                        role="progressbar"
+                        style="width: {{ (existing_count / target_count * 100) | round }}%;">
+
+                        {{ existing_count }} / {{ target_count }}
+
+                    </div>
+
+                </div>
+
+
+                <!-- CAPTURE BUTTON -->
+
+                <button
+                    id="captureBtn"
+                    class="btn btn-primary w-100"
+                    onclick="captureImage()"
+                    disabled>
+
+                    <i class="bi bi-camera-fill"></i>
+                    Capture Photo
+
+                </button>
+
+
+                <!-- MESSAGE -->
+
+                <div
+                    id="captureMsg"
+                    class="mt-3 small text-muted">
+                </div>
+
+
+                <!-- DONE -->
+
+                <a
+                    href="{{ url_for('students') }}"
+                    id="doneBtn"
+                    class="btn btn-success w-100 mt-2 d-none">
+
+                    <i class="bi bi-check-circle"></i>
+
+                    Done — Go to Students
+
+                </a>
+
+            </div>
+
+        </div>
+
+
+        <div class="alert alert-secondary mt-3 small">
+
+            <i class="bi bi-info-circle"></i>
+
+            After capturing all images, go to
+            <strong>Students</strong>
+            and train/update the model.
+
+        </div>
+
+    </div>
+
 </div>
+
 
 <script>
+
 let captured = {{ existing_count }};
+
 const target = {{ target_count }};
+
 const folderName = "{{ folder_name }}";
+
 const studentId = "{{ student_id }}";
 
-function captureImage() {
-    const btn = document.getElementById('captureBtn');
-    const msg = document.getElementById('captureMsg');
-    btn.disabled = true;
-    fetch(`/api/capture/${studentId}`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({folder_name: folderName})
-    })
-    .then(r => r.json())
-    .then(data => {
-        btn.disabled = false;
-        msg.textContent = data.message;
-        if (data.success) {
-            captured = data.count;
-            const pct = Math.round((captured / target) * 100);
-            const bar = document.getElementById('captureProgress');
-            bar.style.width = pct + '%';
-            bar.textContent = `${captured} / ${target}`;
-            if (data.done) {
-                document.getElementById('captureBtn').classList.add('d-none');
-                document.getElementById('doneBtn').classList.remove('d-none');
-            }
-        }
-    })
-    .catch(() => {
-        btn.disabled = false;
-        msg.textContent = 'Request failed. Is the camera running?';
-    });
+let stream = null;
+
+
+/* ============================================
+   START BROWSER CAMERA
+============================================ */
+
+async function startCamera() {
+
+    const msg = document.getElementById("captureMsg");
+
+    const video = document.getElementById("camera");
+
+    const startBtn =
+        document.getElementById("startCameraBtn");
+
+    try {
+
+        msg.textContent =
+            "Requesting camera permission...";
+
+
+        stream =
+            await navigator.mediaDevices.getUserMedia({
+
+                video: {
+
+                    facingMode: "user",
+
+                    width: {
+                        ideal: 1280
+                    },
+
+                    height: {
+                        ideal: 720
+                    }
+
+                },
+
+                audio: false
+
+            });
+
+
+        video.srcObject = stream;
+
+
+        await video.play();
+
+
+        document
+            .getElementById("captureBtn")
+            .disabled = false;
+
+
+        startBtn.disabled = true;
+
+
+        startBtn.innerHTML =
+            '<i class="bi bi-check-circle"></i> Camera Ready';
+
+
+        msg.textContent =
+            "Camera started successfully. You can now capture photos.";
+
+
+    } catch (error) {
+
+        console.error(error);
+
+
+        msg.textContent =
+            "Could not access camera. Please allow camera permission in your browser.";
+
+    }
+
 }
+
+
+/* ============================================
+   CAPTURE IMAGE
+============================================ */
+
+async function captureImage() {
+
+    const btn =
+        document.getElementById("captureBtn");
+
+    const msg =
+        document.getElementById("captureMsg");
+
+    const video =
+        document.getElementById("camera");
+
+    const canvas =
+        document.getElementById("captureCanvas");
+
+
+    if (!stream) {
+
+        msg.textContent =
+            "Please start the camera first.";
+
+        return;
+
+    }
+
+
+    btn.disabled = true;
+
+
+    try {
+
+        const width =
+            video.videoWidth;
+
+        const height =
+            video.videoHeight;
+
+
+        if (!width || !height) {
+
+            throw new Error(
+                "Camera is not ready."
+            );
+
+        }
+
+
+        canvas.width = width;
+
+        canvas.height = height;
+
+
+        const context =
+            canvas.getContext("2d");
+
+
+        context.drawImage(
+
+            video,
+
+            0,
+
+            0,
+
+            width,
+
+            height
+
+        );
+
+
+        const blob =
+            await new Promise(resolve => {
+
+                canvas.toBlob(
+
+                    resolve,
+
+                    "image/jpeg",
+
+                    0.9
+
+                );
+
+            });
+
+
+        if (!blob) {
+
+            throw new Error(
+                "Could not capture image."
+            );
+
+        }
+
+
+        const formData =
+            new FormData();
+
+
+        formData.append(
+
+            "image",
+
+            blob,
+
+            "capture.jpg"
+
+        );
+
+
+        formData.append(
+
+            "folder_name",
+
+            folderName
+
+        );
+
+
+        msg.textContent =
+            "Uploading and processing image...";
+
+
+        const response =
+            await fetch(
+
+                `/api/capture/${studentId}`,
+
+                {
+
+                    method: "POST",
+
+                    body: formData
+
+                }
+
+            );
+
+
+        const data =
+            await response.json();
+
+
+        msg.textContent =
+            data.message;
+
+
+        if (data.success) {
+
+            captured =
+                data.count;
+
+
+            const pct =
+                Math.min(
+                    100,
+                    Math.round(
+                        (captured / target) * 100
+                    )
+                );
+
+
+            const bar =
+                document.getElementById(
+                    "captureProgress"
+                );
+
+
+            bar.style.width =
+                pct + "%";
+
+
+            bar.textContent =
+                `${captured} / ${target}`;
+
+
+            if (data.done) {
+
+                btn.classList.add(
+                    "d-none"
+                );
+
+
+                document
+                    .getElementById("doneBtn")
+                    .classList.remove(
+                        "d-none"
+                    );
+
+
+                stopCamera();
+
+            }
+
+        }
+
+
+    } catch (error) {
+
+        console.error(error);
+
+
+        msg.textContent =
+            "Capture failed: " +
+            error.message;
+
+    } finally {
+
+        if (captured < target) {
+
+            btn.disabled = false;
+
+        }
+
+    }
+
+}
+
+
+/* ============================================
+   STOP CAMERA
+============================================ */
+
+function stopCamera() {
+
+    if (stream) {
+
+        stream
+            .getTracks()
+            .forEach(track => {
+
+                track.stop();
+
+            });
+
+
+        stream = null;
+
+    }
+
+}
+
+
+/* STOP CAMERA WHEN USER LEAVES PAGE */
+
+window.addEventListener(
+
+    "beforeunload",
+
+    stopCamera
+
+);
+
 </script>
 
+
 {% else %}
-<h2 class="mb-4"><i class="bi bi-person-plus"></i> Register New Student</h2>
+
+
+<!-- ========================================================= -->
+<!-- REGISTER STUDENT FORM -->
+<!-- ========================================================= -->
+
+<h2 class="mb-4">
+
+    <i class="bi bi-person-plus"></i>
+
+    Register New Student
+
+</h2>
+
+
 <div class="row justify-content-center">
+
+
     <div class="col-md-6">
-        <div class="card">
+
+
+        <div class="card shadow-sm">
+
+
             <div class="card-body">
+
+
                 <form method="post">
+
+
+                    <!-- STUDENT ID -->
+
                     <div class="mb-3">
-                        <label class="form-label">Student ID</label>
-                        <input type="text" class="form-control" name="student_id" placeholder="e.g. ST001" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Full Name</label>
-                        <input type="text" class="form-control" name="name" placeholder="e.g. John Doe" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Department</label>
-                        <input type="text" class="form-control" name="department" placeholder="e.g. Computer Science">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Email</label>
-                        <input type="email" class="form-control" name="email" placeholder="e.g. john@example.com">
-                    </div>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" required id="consentCheck">
-                        <label class="form-check-label small" for="consentCheck">
-                            The student has been informed that facial images will be captured and stored for
-                            attendance purposes, and has given consent (see README privacy notice).
+
+                        <label class="form-label">
+
+                            Student ID
+
                         </label>
+
+
+                        <input
+
+                            type="text"
+
+                            class="form-control"
+
+                            name="student_id"
+
+                            placeholder="e.g. ST001"
+
+                            required
+
+                        >
+
                     </div>
-                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-arrow-right-circle"></i> Continue to Face Capture</button>
+
+
+
+                    <!-- NAME -->
+
+                    <div class="mb-3">
+
+                        <label class="form-label">
+
+                            Full Name
+
+                        </label>
+
+
+                        <input
+
+                            type="text"
+
+                            class="form-control"
+
+                            name="name"
+
+                            placeholder="e.g. John Doe"
+
+                            required
+
+                        >
+
+                    </div>
+
+
+
+                    <!-- DEPARTMENT -->
+
+                    <div class="mb-3">
+
+                        <label class="form-label">
+
+                            Department
+
+                        </label>
+
+
+                        <input
+
+                            type="text"
+
+                            class="form-control"
+
+                            name="department"
+
+                            placeholder="e.g. Computer Science"
+
+                        >
+
+                    </div>
+
+
+
+                    <!-- EMAIL -->
+
+                    <div class="mb-3">
+
+                        <label class="form-label">
+
+                            Email
+
+                        </label>
+
+
+                        <input
+
+                            type="email"
+
+                            class="form-control"
+
+                            name="email"
+
+                            placeholder="e.g. john@example.com"
+
+                        >
+
+                    </div>
+
+
+
+                    <!-- CONSENT -->
+
+                    <div class="form-check mb-3">
+
+
+                        <input
+
+                            class="form-check-input"
+
+                            type="checkbox"
+
+                            required
+
+                            id="consentCheck"
+
+                        >
+
+
+                        <label
+
+                            class="form-check-label small"
+
+                            for="consentCheck"
+
+                        >
+
+                            The student has been informed that facial images
+                            will be captured and stored for attendance purposes
+                            and has given consent.
+
+                        </label>
+
+
+                    </div>
+
+
+
+                    <!-- SUBMIT -->
+
+                    <button
+
+                        type="submit"
+
+                        class="btn btn-primary w-100"
+
+                    >
+
+                        <i class="bi bi-arrow-right-circle"></i>
+
+                        Continue to Face Capture
+
+                    </button>
+
+
                 </form>
+
+
             </div>
+
+
         </div>
+
+
     </div>
+
+
 </div>
+
+
 {% endif %}
+
 
 {% endblock %}
