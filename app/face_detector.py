@@ -55,17 +55,21 @@ class FaceDetector:
         self._detector = None  # lazy-loaded MTCNN instance
 
     def _load(self):
-        if self._detector is None:
-            try:
-                from mtcnn import MTCNN  # imported here: heavy TF import
-            except ImportError as exc:
-                raise ImportError(
-                    "The 'mtcnn' package is not installed. Run: pip install mtcnn"
-                ) from exc
-            logger.info("Loading MTCNN face detector...")
-            self._detector = MTCNN(min_face_size=self.min_face_size)
-            logger.info("MTCNN loaded successfully.")
-        return self._detector
+       if self._detector is None:
+        try:
+            from mtcnn import MTCNN
+        except ImportError as exc:
+            raise ImportError(
+                "The 'mtcnn' package is not installed. Run: pip install mtcnn"
+            ) from exc
+
+        logger.info("Loading MTCNN face detector...")
+
+        self._detector = MTCNN()
+
+        logger.info("MTCNN loaded successfully.")
+
+       return self._detector
 
     def detect(self, frame_bgr: np.ndarray) -> List[DetectedFace]:
         """Detect all faces in a BGR frame (as returned by OpenCV).
@@ -102,12 +106,20 @@ class FaceDetector:
             x, y = max(0, x), max(0, y)
 
             if not is_valid_bbox(x, y, w, h, frame_bgr.shape):
-                continue
+             continue
+    
+            if w < self.min_face_size or h < self.min_face_size:
+             continue
 
             landmarks = result.get("keypoints")
-            faces.append(DetectedFace(box=(x, y, w, h), confidence=confidence, landmarks=landmarks))
 
-        return faces
+            faces.append(
+                DetectedFace(
+                box=(x, y, w, h),
+                confidence=confidence,
+                landmarks=landmarks
+            )
+        )
 
     def detect_largest(self, frame_bgr: np.ndarray) -> Optional[DetectedFace]:
         """Convenience method for registration: return only the largest
