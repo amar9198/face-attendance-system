@@ -292,187 +292,6 @@ def students():
 
 
 @app.route(
-    "/students/delete/<student_id>",
-    methods=["POST"]
-)
-def delete_student(student_id):
-
-    database.delete_student(student_id)
-
-    flash(
-        f"Student {student_id} deleted successfully.",
-        "warning"
-    )
-
-    return redirect(
-        url_for("students")
-    )
-
-
-# ============================================================
-# REGISTER STUDENT
-# ============================================================
-
-@app.route(
-    "/students/register",
-    methods=["GET", "POST"]
-)
-def register():
-
-    if request.method == "POST":
-
-        student_id = sanitize_student_id(
-            request.form.get("student_id", "")
-        )
-
-        name = sanitize_name(
-            request.form.get("name", "")
-        )
-
-        department = request.form.get(
-            "department",
-            ""
-        ).strip()
-
-        email = request.form.get(
-            "email",
-            ""
-        ).strip()
-
-        if not student_id or not name:
-
-            flash(
-                "Student ID and Name are required.",
-                "danger"
-            )
-
-            return render_template(
-                "register.html"
-            )
-
-        if database.student_exists(student_id):
-
-            flash(
-                f"Student ID {student_id} already exists.",
-                "danger"
-            )
-
-            return render_template(
-                "register.html"
-            )
-
-        folder_name = f"{student_id}_{name}"
-
-        folder_path = os.path.join(
-            config.DATASET_PATH,
-            folder_name
-        )
-
-        os.makedirs(
-            folder_path,
-            exist_ok=True
-        )
-
-        added = database.add_student(
-            student_id,
-            name.replace("_", " "),
-            department,
-            email
-        )
-
-        if not added:
-
-            flash(
-                "Could not register student.",
-                "danger"
-            )
-
-            return render_template(
-                "register.html"
-            )
-
-        flash(
-            "Student registered successfully. Capture face images now.",
-            "success"
-        )
-
-        return redirect(
-            url_for(
-                "capture",
-                student_id=student_id,
-                name=name
-            )
-        )
-
-    return render_template(
-        "register.html"
-    )
-
-
-# ============================================================
-# CAPTURE PAGE
-# ============================================================
-
-@app.route(
-    "/students/register/capture/<student_id>"
-)
-def capture(student_id):
-
-    name = request.args.get(
-        "name",
-        student_id
-    )
-
-    student = database.get_student(
-        student_id
-    )
-
-    if student is None:
-
-        flash(
-            "Unknown student.",
-            "danger"
-        )
-
-        return redirect(
-            url_for("register")
-        )
-
-    folder_name = f"{student_id}_{name}"
-
-    folder_path = os.path.join(
-        config.DATASET_PATH,
-        folder_name
-    )
-
-    existing = 0
-
-    if os.path.isdir(folder_path):
-
-        existing = len([
-            f for f in os.listdir(folder_path)
-            if f.lower().endswith(
-                (".jpg", ".jpeg", ".png")
-            )
-        ])
-
-    return render_template(
-        "register.html",
-        capture_mode=True,
-        student_id=student_id,
-        name=name,
-        folder_name=folder_name,
-        existing_count=existing,
-        target_count=config.NUM_COLLECTION_IMAGES,
-    )
-
-
-
-# ============================================================
-# CAPTURE FACE IMAGE FROM BROWSER CAMERA
-# ============================================================
-
-@app.route(
     "/api/capture/<student_id>",
     methods=["POST"]
 )
@@ -486,11 +305,25 @@ def api_capture(student_id):
 
         student = database.get_student(student_id)
 
+        logger.info(
+            "Capture request received for student_id=%s, student=%s",
+            student_id,
+            student
+        )
+
         if student is None:
+
+            logger.warning(
+                "Student not found during capture: %s",
+                student_id
+            )
 
             return jsonify({
                 "success": False,
-                "message": "Student not found."
+                "message": (
+                    f"Student {student_id} not found. "
+                    "Please register the student again."
+                )
             }), 404
 
 
@@ -502,8 +335,17 @@ def api_capture(student_id):
 
         if not folder_name:
 
-            folder_name = f"{student_id}_{student['name'].replace(' ', '_')}"
+            student_name = student.get("name", "Unknown")
 
+            folder_name = (
+                f"{student_id}_"
+                f"{student_name.replace(' ', '_')}"
+            )
+
+
+        # ----------------------------------------------------
+        # CREATE DATASET FOLDER
+        # ----------------------------------------------------
 
         folder_path = os.path.join(
             config.DATASET_PATH,
@@ -521,6 +363,11 @@ def api_capture(student_id):
         # ----------------------------------------------------
 
         if "image" not in request.files:
+
+            logger.warning(
+                "No image received for student: %s",
+                student_id
+            )
 
             return jsonify({
                 "success": False,
@@ -542,7 +389,6 @@ def api_capture(student_id):
             np.uint8
         )
 
-
         frame = cv2.imdecode(
             np_array,
             cv2.IMREAD_COLOR
@@ -550,6 +396,11 @@ def api_capture(student_id):
 
 
         if frame is None:
+
+            logger.warning(
+                "Invalid camera image for student: %s",
+                student_id
+            )
 
             return jsonify({
                 "success": False,
@@ -561,6 +412,11 @@ def api_capture(student_id):
         # DETECT FACE
         # ----------------------------------------------------
 
+        logger.info(
+            "Detecting face for student: %s",
+            student_id
+        )
+
         face = _registration_detector.detect_largest(
             frame
         )
@@ -570,7 +426,10 @@ def api_capture(student_id):
 
             return jsonify({
                 "success": False,
-                "message": "No face detected. Please look at the camera."
+                "message": (
+                    "No face detected. "
+                    "Please look directly at the camera."
+                )
             })
 
 
@@ -627,7 +486,6 @@ def api_capture(student_id):
 
         filename = f"{next_index:03d}.jpg"
 
-
         output_path = os.path.join(
             folder_path,
             filename
@@ -641,6 +499,11 @@ def api_capture(student_id):
 
 
         if not success:
+
+            logger.error(
+                "Could not save image: %s",
+                output_path
+            )
 
             return jsonify({
                 "success": False,
@@ -657,6 +520,14 @@ def api_capture(student_id):
         )
 
 
+        logger.info(
+            "Image captured successfully: %s (%s/%s)",
+            student_id,
+            next_index,
+            config.NUM_COLLECTION_IMAGES
+        )
+
+
         return jsonify({
 
             "success": True,
@@ -667,9 +538,10 @@ def api_capture(student_id):
 
             "done": done,
 
-            "message":
+            "message": (
                 f"Captured {next_index}/"
                 f"{config.NUM_COLLECTION_IMAGES}"
+            )
 
         })
 
@@ -679,7 +551,6 @@ def api_capture(student_id):
         logger.exception(
             "Browser face capture error"
         )
-
 
         return jsonify({
 
