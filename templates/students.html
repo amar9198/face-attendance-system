@@ -85,13 +85,45 @@ function trainModel() {
 
     fetch('/api/train', { method: 'POST' })
         .then(async r => {
-            const data = await r.json();
-            if (!r.ok) {
+            const text = await r.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch {
+                throw new Error(`Training request failed (HTTP ${r.status}).`);
+            }
+            if (!r.ok && r.status !== 202) {
                 throw new Error(data.message || data.log || 'Training failed.');
             }
             return data;
         })
         .then(data => {
+            if (data.state === 'running') {
+                const poll = setInterval(async () => {
+                    const response = await fetch('/api/train/status');
+                    const status = await response.json();
+                    if (status.state === 'running') {
+                        return;
+                    }
+                    clearInterval(poll);
+                    if (status.success) {
+                        box.classList.remove('alert-info');
+                        box.classList.add('alert-success');
+                        const duration = status.duration_seconds
+                            ? ` (${status.duration_seconds.toFixed(1)}s)` : '';
+                        box.innerHTML = '<i class="bi bi-check-circle"></i> Model trained successfully' + duration + '. Live attendance will use the updated model.';
+                    } else {
+                        box.classList.remove('alert-info');
+                        box.classList.add('alert-danger');
+                        box.innerHTML = '<i class="bi bi-x-circle"></i> ' + (status.message || 'Training failed.');
+                    }
+                    if (button) {
+                        button.disabled = false;
+                        button.innerHTML = button.dataset.originalText;
+                    }
+                }, 3000);
+                return;
+            }
             if (data.success) {
                 box.classList.remove('alert-info');
                 box.classList.add('alert-success');
@@ -109,8 +141,6 @@ function trainModel() {
             box.classList.remove('alert-info');
             box.classList.add('alert-danger');
             box.innerHTML = '<i class="bi bi-x-circle"></i> ' + (error.message || 'Training request failed.');
-        })
-        .finally(() => {
             if (button) {
                 button.disabled = false;
                 button.innerHTML = button.dataset.originalText;

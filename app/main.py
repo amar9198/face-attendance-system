@@ -94,6 +94,15 @@ _latest_results = []
 
 _results_lock = threading.Lock()
 _live_processing_lock = threading.Lock()
+_training_lock = threading.Lock()
+_training_status = {
+    "state": "idle",
+    "success": None,
+    "stage": None,
+    "message": "",
+    "log": "",
+    "duration_seconds": None,
+}
 _browser_liveness_lock = threading.Lock()
 _browser_liveness = {
     "eyes_were_open": False,
@@ -1078,166 +1087,74 @@ def api_capture(student_id):
 # MODEL TRAINING
 # ============================================================
 
-@app.route(
-    "/api/train",
-    methods=["POST"]
-)
-def api_train():
-
-    global _pipeline
+def _run_training_job():
+    global _pipeline, _training_status
 
     training_started = time.perf_counter()
-    release_camera()
-
-    project_python = os.path.join(
-        PROJECT_ROOT,
-        "venv",
-        "Scripts",
-        "python.exe",
-    )
-    python_exe = (
-        project_python
-        if os.path.isfile(project_python)
-        else sys.executable
-    )
+    project_python = os.path.join(PROJECT_ROOT, "venv", "Scripts", "python.exe")
+    python_exe = project_python if os.path.isfile(project_python) else sys.executable
 
     try:
-
+        release_camera()
         extract = subprocess.run(
-
-            [
-                python_exe,
-
-                os.path.join(
-                    PROJECT_ROOT,
-                    "scripts",
-                    "extract_features.py"
-                )
-            ],
-
-            cwd=PROJECT_ROOT,
-
-            capture_output=True,
-
-            text=True,
-
-            timeout=3600,
-
+            [python_exe, os.path.join(PROJECT_ROOT, "scripts", "extract_features.py")],
+            cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=3600,
         )
-
         if extract.returncode != 0:
-
-            logger.error(
-                "Feature extraction failed: %s",
-                extract.stderr
-            )
-
-            return jsonify({
-
-                "success": False,
-
-                "stage":
-                    "extract_features",
-
-                "log":
-                    extract.stderr[-4000:],
-
-                "duration_seconds":
-                    round(time.perf_counter() - training_started, 2)
-
-            }), 500
+            raise RuntimeError("Feature extraction failed.")
 
         train = subprocess.run(
-
-            [
-                python_exe,
-
-                os.path.join(
-                    PROJECT_ROOT,
-                    "scripts",
-                    "train_model.py"
-                )
-            ],
-
-            cwd=PROJECT_ROOT,
-
-            capture_output=True,
-
-            text=True,
-
-            timeout=3600,
-
+            [python_exe, os.path.join(PROJECT_ROOT, "scripts", "train_model.py")],
+            cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=3600,
         )
-
         if train.returncode != 0:
+            raise RuntimeError("Model training failed.")
 
-            logger.error(
-                "Training failed: %s",
-                train.stderr
-            )
-
-            return jsonify({
-
-                "success": False,
-
-                "stage":
-                    "train_model",
-
-                "log":
-                    train.stderr[-4000:],
-
-                "duration_seconds":
-                    round(time.perf_counter() - training_started, 2)
-
-            }), 500
-
+        _pipeline = None
+        with _training_lock:
+            _training_status.update({
+                "state": "completed",
+                "success": True,
+                "stage": None,
+                "message": "Model trained successfully.",
+                "log": (extract.stdout[-2000:] + "\n" + train.stdout[-2000:]),
+                "duration_seconds": round(time.perf_counter() - training_started, 2),
+            })
     except subprocess.TimeoutExpired:
-
-        return jsonify({
-
-            "success": False,
-
-            "message":
-                "Training timed out.",
-
-            "duration_seconds":
-                round(time.perf_counter() - training_started, 2)
-
-        }), 500
-
+        with _training_lock:
+            _training_status.update({
+                "state": "failed", "success": False,
+                "message": "Training timed out.",
+                "duration_seconds": round(time.perf_counter() - training_started, 2),
+            })
     except Exception as exc:
+        logger.exception("Training failed")
+        with _training_lock:
+            _training_status.update({
+                "state": "failed", "success": False,
+                "message": str(exc),
+                "duration_seconds": round(time.perf_counter() - training_started, 2),
+            })
 
-        logger.exception(
-            "Training failed"
-        )
 
-        return jsonify({
+@app.route("/api/train", methods=["POST"])
+def api_train():
+    with _training_lock:
+        if _training_status["state"] == "running":
+            return jsonify(_training_status), 202
+        _training_status.update({
+            "state": "running", "success": None, "stage": None,
+            "message": "Training started.", "log": "", "duration_seconds": None,
+        })
 
-            "success": False,
+    threading.Thread(target=_run_training_job, daemon=True, name="TrainingThread").start()
+    return jsonify({"success": True, "state": "running", "message": "Training started."}), 202
 
-            "message": str(exc),
 
-            "duration_seconds":
-                round(time.perf_counter() - training_started, 2)
-
-        }), 500
-
-    # Force pipeline reload
-    _pipeline = None
-
-    return jsonify({
-
-        "success": True,
-
-        "log":
-            extract.stdout[-2000:]
-            + "\n"
-            + train.stdout[-2000:],
-
-        "duration_seconds":
-            round(time.perf_counter() - training_started, 2)
-
-    })
+@app.route("/api/train/status")
+def api_train_status():
+    with _training_lock:
+        return jsonify(dict(_training_status))
 
 
 # ============================================================
