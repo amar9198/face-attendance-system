@@ -141,13 +141,23 @@ class FaceDetector:
             "Loading MTCNN face detector..."
         )
 
-
         try:
-
-            self._detector = MTCNN(
-                min_face_size=self.min_face_size,
-                steps_threshold=[0.5, 0.6, 0.7],
-            )
+            detector_options = {
+                "steps_threshold": [0.5, 0.6, 0.7],
+            }
+            try:
+                self._detector = MTCNN(
+                    min_face_size=self.min_face_size,
+                    **detector_options,
+                )
+            except TypeError as exc:
+                if "min_face_size" not in str(exc):
+                    raise
+                logger.warning(
+                    "Installed MTCNN does not support min_face_size; "
+                    "using its default minimum face size."
+                )
+                self._detector = MTCNN(**detector_options)
 
         except Exception as exc:
 
