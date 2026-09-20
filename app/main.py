@@ -1096,19 +1096,44 @@ def _run_training_job():
 
     try:
         release_camera()
-        extract = subprocess.run(
-            [python_exe, os.path.join(PROJECT_ROOT, "scripts", "extract_features.py")],
-            cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=3600,
-        )
-        if extract.returncode != 0:
-            raise RuntimeError("Feature extraction failed.")
+        student_ids = set()
+        if os.path.isdir(config.DATASET_PATH):
+            for folder_name in os.listdir(config.DATASET_PATH):
+                folder_path = os.path.join(config.DATASET_PATH, folder_name)
+                if not os.path.isdir(folder_path):
+                    continue
+                if any(
+                    filename.lower().endswith((".jpg", ".jpeg", ".png"))
+                    for filename in os.listdir(folder_path)
+                ):
+                    student_ids.add(folder_name.split("_", 1)[0])
 
-        train = subprocess.run(
-            [python_exe, os.path.join(PROJECT_ROOT, "scripts", "train_model.py")],
-            cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=3600,
-        )
+        if len(student_ids) == 1:
+            extract = subprocess.run(
+                [python_exe, os.path.join(PROJECT_ROOT, "scripts", "train_single_student.py")],
+                cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=300,
+            )
+        else:
+            extract = subprocess.run(
+                [python_exe, os.path.join(PROJECT_ROOT, "scripts", "extract_features.py")],
+                cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=3600,
+            )
+        if extract.returncode != 0:
+            raise RuntimeError(
+                "Feature extraction failed: " + extract.stderr[-2000:]
+            )
+
+        if len(student_ids) == 1:
+            train = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="", stderr=""
+            )
+        else:
+            train = subprocess.run(
+                [python_exe, os.path.join(PROJECT_ROOT, "scripts", "train_model.py")],
+                cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=3600,
+            )
         if train.returncode != 0:
-            raise RuntimeError("Model training failed.")
+            raise RuntimeError("Model training failed: " + train.stderr[-2000:])
 
         _pipeline = None
         with _training_lock:
