@@ -19,6 +19,7 @@ Usage:
 
 import os
 import sys
+import json
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -93,13 +94,42 @@ def main() -> int:
         )
         return 1
 
-    embedder = FaceEmbedder()
+    cached = {}
+    if os.path.isfile(config.EMBEDDING_CACHE_PATH):
+        try:
+            with open(config.EMBEDDING_CACHE_PATH, "r", encoding="utf-8") as cache_file:
+                cache_data = json.load(cache_file)
+            if cache_data.get("model_name") == config.VGGFACE_MODEL_NAME:
+                cached = cache_data.get("images", {})
+        except (OSError, ValueError) as exc:
+            logger.warning("Ignoring invalid embedding cache: %s", exc)
+
     embeddings = []
     labels = []
+    updated_cache = {}
+    pending = []
     corrupted = 0
 
-    logger.info("Extracting VGGFace embeddings (this loads TensorFlow, first batch is slow)...")
-    for path, student_id in tqdm(pairs, desc="Extracting features"):
+    for path, student_id in pairs:
+        stat = os.stat(path)
+        signature = f"{stat.st_mtime_ns}:{stat.st_size}"
+        cached_entry = cached.get(path)
+        if cached_entry and cached_entry.get("signature") == signature:
+            updated_cache[path] = cached_entry
+        else:
+            pending.append((path, student_id, signature))
+
+    logger.info(
+        "Using %d cached embeddings; extracting %d new or changed images.",
+        len(updated_cache),
+        len(pending),
+    )
+
+    # Loading TensorFlow/DeepFace is expensive. Existing cached embeddings
+    # should be enough when the dataset has not changed.
+    embedder = FaceEmbedder() if pending else None
+
+    for path, student_id, signature in tqdm(pending, desc="Extracting new features"):
         image = cv2.imread(path)
         if image is None:
             logger.warning("Could not decode image, skipping: %s", path)
@@ -111,11 +141,21 @@ def main() -> int:
             logger.warning("Failed to extract embedding for %s: %s", path, exc)
             corrupted += 1
             continue
-        embeddings.append(embedding)
-        labels.append(student_id)
+        updated_cache[path] = {
+            "student_id": student_id,
+            "signature": signature,
+            "embedding": embedding.tolist(),
+        }
 
     if corrupted:
         logger.warning("%d image(s) were skipped due to read/embedding errors.", corrupted)
+
+    for path, student_id in pairs:
+        entry = updated_cache.get(path)
+        if entry is None:
+            continue
+        embeddings.append(np.asarray(entry["embedding"], dtype=np.float32))
+        labels.append(student_id)
 
     if not embeddings:
         logger.error("No embeddings could be extracted. Aborting.")
@@ -126,6 +166,14 @@ def main() -> int:
 
     np.save(config.EMBEDDINGS_PATH, embeddings_arr)
     np.save(config.LABELS_PATH, labels_arr)
+    with open(config.EMBEDDING_CACHE_PATH, "w", encoding="utf-8") as cache_file:
+        json.dump(
+            {
+                "model_name": config.VGGFACE_MODEL_NAME,
+                "images": updated_cache,
+            },
+            cache_file,
+        )
 
     logger.info("Saved %s (%s)", config.EMBEDDINGS_PATH, embeddings_arr.shape)
     logger.info("Saved %s (%s)", config.LABELS_PATH, labels_arr.shape)

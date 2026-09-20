@@ -5,7 +5,7 @@
 
 document.addEventListener("DOMContentLoaded", () => {
     // Auto-dismiss flash alerts after a few seconds.
-    document.querySelectorAll(".alert").forEach((alertEl) => {
+    document.querySelectorAll(".alert:not(#trainStatus)").forEach((alertEl) => {
         setTimeout(() => {
             if (window.bootstrap) {
                 const alert = window.bootstrap.Alert.getOrCreateInstance(alertEl);

@@ -1,19 +1,22 @@
 {
-  "num_students": 6,
-  "num_images": 151,
+  "num_students": 8,
+  "num_images": 122,
   "students": [
     "2401660130012",
     "2401660130013",
     "2401660130026",
-    "2401660130027",
-    "2401660130044",
-    "2401660300003"
+    "2401660130030",
+    "2401660130039",
+    "2401660130041",
+    "2401660300003",
+    "44"
   ],
-  "train_size": 105,
-  "val_size": 23,
-  "test_size": 23,
+  "train_size": 85,
+  "val_size": 18,
+  "test_size": 19,
+  "classifier_fit_size": 122,
   "validation_accuracy": 1.0,
   "svm_kernel": "linear",
   "svm_C": 1.0,
-  "recognition_threshold": 0.55
+  "recognition_threshold": 0.4
 }

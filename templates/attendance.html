@@ -308,15 +308,25 @@ Attendance - Face Attendance System
 
                 <!-- CAMERA VIDEO -->
 
-                <video
-                    id="liveVideo"
-                    autoplay
-                    playsinline
-                    muted
-                    class="w-100 rounded d-none"
-                    style="max-height: 520px; background: #000;"
-                >
-                </video>
+                <div class="position-relative rounded overflow-hidden">
+
+                    <video
+                        id="liveVideo"
+                        autoplay
+                        playsinline
+                        muted
+                        class="w-100 d-none"
+                        style="max-height: 520px; background: #000;"
+                    >
+                    </video>
+
+                    <canvas
+                        id="overlayCanvas"
+                        class="position-absolute top-0 start-0 w-100 h-100"
+                        style="pointer-events: none;"
+                    ></canvas>
+
+                </div>
 
 
                 <!-- HIDDEN CANVAS -->
@@ -479,6 +489,10 @@ let isCameraRunning = false;
 
 let recognitionInProgress = false;
 
+let recognitionFrameWidth = 640;
+
+let recognitionFrameHeight = 480;
+
 
 
 /* =========================================================
@@ -502,12 +516,20 @@ async function startCamera() {
     const resultsList =
         document.getElementById("resultsList");
 
+    const overlayCanvas =
+        document.getElementById("overlayCanvas");
+
     const cameraStatus =
         document.getElementById("cameraStatus");
 
 
     if (isCameraRunning) {
         return;
+    }
+
+    if (overlayCanvas) {
+        const ctx = overlayCanvas.getContext("2d");
+        ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
     }
 
 
@@ -591,19 +613,19 @@ async function startCamera() {
 
                 <i class="bi bi-search"></i>
 
-                Camera started. Looking for faces...
+                Camera started. Blink eyes for detection.
 
             </div>
 
         `;
 
 
-        /* Start recognition every 1 second */
+        /* Poll twice per second for faster blink detection */
 
         recognitionTimer =
             setInterval(
                 sendFrameForRecognition,
-                1000
+                300
             );
 
 
@@ -611,7 +633,7 @@ async function startCamera() {
 
         setTimeout(
             sendFrameForRecognition,
-            500
+            300
         );
 
 
@@ -730,9 +752,16 @@ function stopCamera() {
     const resultsList =
         document.getElementById("resultsList");
 
+    const overlayCanvas =
+        document.getElementById("overlayCanvas");
 
     const cameraStatus =
         document.getElementById("cameraStatus");
+
+    if (overlayCanvas) {
+        const ctx = overlayCanvas.getContext("2d");
+        ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    }
 
 
     /* Stop recognition timer */
@@ -892,7 +921,10 @@ async function sendFrameForRecognition() {
 
         /* Resize frame before sending */
 
-        const width = 640;
+        const width = Math.min(
+            video.videoWidth || 1280,
+            1280
+        );
 
 
         const height =
@@ -911,6 +943,9 @@ async function sendFrameForRecognition() {
         canvas.width = width;
 
         canvas.height = height;
+
+        recognitionFrameWidth = width;
+        recognitionFrameHeight = height;
 
 
         const context =
@@ -1036,9 +1071,24 @@ async function sendFrameForRecognition() {
 
         /* Display recognition results */
 
-        displayResults(
-            data.results || []
-        );
+        const results = data.results || [];
+
+        if (data.live === false) {
+            const resultsBox = document.getElementById("resultsList");
+            if (resultsBox) {
+                resultsBox.innerHTML = `
+                    <div class="text-warning">
+                        <i class="bi bi-person-walking"></i>
+                        ${data.message || "Blink eyes for detection."}
+                    </div>
+                `;
+            }
+            drawRecognitionOverlay([]);
+            return;
+        }
+
+        displayResults(results);
+        drawRecognitionOverlay(results);
 
 
     }
@@ -1064,6 +1114,76 @@ async function sendFrameForRecognition() {
 /* =========================================================
    DISPLAY RESULTS
 ========================================================= */
+
+function drawRecognitionOverlay(results) {
+
+    const video =
+        document.getElementById("liveVideo");
+
+    const canvas =
+        document.getElementById("overlayCanvas");
+
+    if (!video || !canvas) {
+        return;
+    }
+
+    const ctx = canvas.getContext("2d");
+
+    const displayRect = video.getBoundingClientRect();
+    const width = recognitionFrameWidth || 640;
+    const height = recognitionFrameHeight || 480;
+
+    canvas.width = width;
+    canvas.height = height;
+    canvas.style.width = `${displayRect.width}px`;
+    canvas.style.height = `${displayRect.height}px`;
+
+    ctx.clearRect(0, 0, width, height);
+
+    if (!results || results.length === 0) {
+        return;
+    }
+
+    results.forEach((result) => {
+
+        const box = Array.isArray(result.box) ? result.box : [];
+
+        if (box.length < 4) {
+            return;
+        }
+
+        const [x, y, w, h] = box;
+        const x1 = Number(x) || 0;
+        const y1 = Number(y) || 0;
+        const boxWidth = Number(w) || 0;
+        const boxHeight = Number(h) || 0;
+
+        const rectX = x1;
+        const rectY = y1;
+        const rectW = boxWidth;
+        const rectH = boxHeight;
+
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = result.student_id ? "#10b981" : "#ef4444";
+        ctx.strokeRect(rectX, rectY, rectW, rectH);
+
+        const label = result.name ? `${result.name}` : "Unknown";
+        const text = `${label} ${result.confidence ? ((result.confidence * 100).toFixed(1) + "%") : ""}`;
+        const metrics = ctx.measureText(text);
+        const labelWidth = metrics.width + 16;
+        const labelHeight = 24;
+
+        ctx.fillStyle = "rgba(15, 23, 42, 0.82)";
+        ctx.fillRect(rectX, Math.max(0, rectY - labelHeight - 6), labelWidth, labelHeight);
+
+        ctx.font = "14px sans-serif";
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(text, rectX + 8, Math.max(12, rectY - 12));
+
+    });
+
+}
+
 
 function displayResults(results) {
 
@@ -1098,6 +1218,7 @@ function displayResults(results) {
 
         `;
 
+        drawRecognitionOverlay([]);
 
         return;
 

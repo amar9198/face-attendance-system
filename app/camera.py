@@ -45,9 +45,9 @@ logger = get_logger(__name__)
 # COLORS (BGR)
 # ============================================================
 
-BOX_COLOR_KNOWN = (0, 200, 0)        # Green
-BOX_COLOR_UNKNOWN = (0, 0, 220)      # Red
-BOX_COLOR_ALREADY = (0, 165, 255)    # Orange
+BOX_COLOR_KNOWN = (0, 200, 0)
+BOX_COLOR_UNKNOWN = (0, 0, 220)
+BOX_COLOR_ALREADY = (0, 165, 255)
 
 
 # ============================================================
@@ -57,11 +57,6 @@ BOX_COLOR_ALREADY = (0, 165, 255)    # Orange
 class VideoCamera:
     """
     Thread-safe webcam manager.
-
-    - Camera opens only when start() is called
-    - Camera closes physically when stop() is called
-    - Background thread captures frames
-    - Only latest frame is stored
     """
 
     def __init__(
@@ -94,7 +89,6 @@ class VideoCamera:
 
         with self._camera_lock:
 
-            # Camera already running
             if self.is_running:
                 return
 
@@ -107,23 +101,18 @@ class VideoCamera:
 
             with self._frame_lock:
                 self._frame = None
-            # ------------------------------------------------
-            # OPEN CAMERA
-            # ------------------------------------------------
+
+            cap = None
 
             try:
 
-                cap = None
-
                 if os.name == "nt":
 
-                    # Try DirectShow first
                     cap = cv2.VideoCapture(
                         self.camera_index,
                         cv2.CAP_DSHOW
                     )
 
-                    # If DirectShow fails, try MSMF
                     if not cap.isOpened():
 
                         cap.release()
@@ -133,7 +122,6 @@ class VideoCamera:
                             cv2.CAP_MSMF
                         )
 
-                    # Final fallback
                     if not cap.isOpened():
 
                         cap.release()
@@ -153,6 +141,7 @@ class VideoCamera:
                 raise CameraUnavailableError(
                     f"Could not initialize camera: {exc}"
                 )
+
 
             # ------------------------------------------------
             # CHECK CAMERA
@@ -189,30 +178,10 @@ class VideoCamera:
                     config.CAMERA_FRAME_HEIGHT
                 )
 
-            except Exception:
-                pass
-
-
-            # ------------------------------------------------
-            # REDUCE CAMERA BUFFER
-            # ------------------------------------------------
-
-            try:
-
                 cap.set(
                     cv2.CAP_PROP_BUFFERSIZE,
                     1
                 )
-
-            except Exception:
-                pass
-
-
-            # ------------------------------------------------
-            # CAMERA FPS
-            # ------------------------------------------------
-
-            try:
 
                 cap.set(
                     cv2.CAP_PROP_FPS,
@@ -222,10 +191,6 @@ class VideoCamera:
             except Exception:
                 pass
 
-
-            # ------------------------------------------------
-            # STORE CAMERA
-            # ------------------------------------------------
 
             self.cap = cap
 
@@ -246,12 +211,12 @@ class VideoCamera:
 
 
         # ----------------------------------------------------
-        # WAIT BRIEFLY FOR FIRST FRAME
+        # WAIT FOR FIRST FRAME
         # ----------------------------------------------------
 
         start_time = time.time()
 
-        while time.time() - start_time < 1.5:
+        while time.time() - start_time < 2:
 
             with self._frame_lock:
 
@@ -296,13 +261,8 @@ class VideoCamera:
                     break
 
 
-                # Read frame
                 ok, frame = cap.read()
 
-
-                # ------------------------------------------------
-                # CAMERA READ FAILED
-                # ------------------------------------------------
 
                 if not ok or frame is None:
 
@@ -321,14 +281,9 @@ class VideoCamera:
                     continue
 
 
-                # ------------------------------------------------
-                # CAMERA READ SUCCESS
-                # ------------------------------------------------
-
                 failures = 0
 
 
-                # Keep ONLY newest frame
                 with self._frame_lock:
 
                     self._frame = frame
@@ -369,7 +324,6 @@ class VideoCamera:
 
         with self._camera_lock:
 
-            # Already stopped
             if (
                 not self._running
                 and self.cap is None
@@ -383,21 +337,15 @@ class VideoCamera:
             )
 
 
-            # Stop thread
             self._running = False
 
             self._stop_event.set()
 
 
-            # Save camera reference
             cap = self.cap
 
             self.cap = None
 
-
-            # ------------------------------------------------
-            # RELEASE PHYSICAL CAMERA
-            # ------------------------------------------------
 
             if cap is not None:
 
@@ -417,10 +365,6 @@ class VideoCamera:
                     )
 
 
-        # ----------------------------------------------------
-        # JOIN THREAD OUTSIDE LOCK
-        # ----------------------------------------------------
-
         thread = self._thread
 
         if (
@@ -434,10 +378,6 @@ class VideoCamera:
 
         self._thread = None
 
-
-        # ----------------------------------------------------
-        # CLEAR LAST FRAME
-        # ----------------------------------------------------
 
         with self._frame_lock:
 
@@ -475,9 +415,7 @@ class VideoCamera:
 
 class RecognitionPipeline:
     """
-    Face detection + face recognition + attendance pipeline.
-
-    The AI models are loaded once and reused.
+    Face detection + recognition + attendance pipeline.
     """
 
     def __init__(self):
@@ -487,10 +425,6 @@ class RecognitionPipeline:
         )
 
 
-        # ----------------------------------------------------
-        # LOAD COMPONENTS
-        # ----------------------------------------------------
-
         self.detector = FaceDetector()
 
         self.recognizer = FaceRecognizer()
@@ -498,11 +432,7 @@ class RecognitionPipeline:
         self.attendance_manager = AttendanceManager()
 
 
-        # ----------------------------------------------------
-        # MODEL STATUS
-        # ----------------------------------------------------
-
-        self.model_ready = (
+        self.model_ready = bool(
             self.recognizer.is_trained
         )
 
@@ -521,84 +451,214 @@ class RecognitionPipeline:
 
 
     # ========================================================
+    # SAFE FACE LIST
+    # ========================================================
+
+    @staticmethod
+    def _normalize_faces(faces):
+
+        """
+        Always return a Python list.
+
+        Prevents:
+        TypeError: 'NoneType' object is not iterable
+        """
+
+        if faces is None:
+            return []
+
+        if isinstance(faces, list):
+            return faces
+
+        if isinstance(faces, tuple):
+            return list(faces)
+
+        try:
+            return list(faces)
+
+        except TypeError:
+            return [faces]
+
+
+    # ========================================================
+    # SAFE RESULT DICTIONARY
+    # ========================================================
+
+    @staticmethod
+    def _safe_dict(value):
+
+        if isinstance(value, dict):
+            return value
+
+        return {}
+
+
+    # ========================================================
     # PROCESS FRAME
     # ========================================================
 
     def process_frame(
         self,
         frame: np.ndarray
-    ) -> Tuple[
-        np.ndarray,
-        List[Dict[str, Any]]
-    ]:
-
-        # Copy frame for drawing
-        annotated = frame.copy()
-
-        results: List[
-            Dict[str, Any]
-        ] = []
+    ) -> Tuple[np.ndarray, List[Dict[str, Any]]]:
+        return process_frame(self, frame)
 
 
-        # ----------------------------------------------------
-        # CHECK TRAINED MODEL
-        # ----------------------------------------------------
+def process_frame(
+    self,
+    frame: np.ndarray
+) -> Tuple[np.ndarray, List[Dict[str, Any]]]:
 
-        if not self.recognizer.is_trained:
+    # ----------------------------------------------------
+    # VALIDATE FRAME
+    # ----------------------------------------------------
 
-            cv2.putText(
+    if frame is None:
 
-                annotated,
+        logger.warning("Received empty frame.")
 
-                "Model not trained",
-
-                (10, 30),
-
-                cv2.FONT_HERSHEY_SIMPLEX,
-
-                0.7,
-
-                (0, 0, 255),
-
-                2,
-
-                cv2.LINE_AA
-
-            )
-
-            return annotated, results
+        return np.zeros(
+            (480, 640, 3),
+            dtype=np.uint8
+        ), []
 
 
-        # ----------------------------------------------------
-        # DETECT ALL FACES
-        # ----------------------------------------------------
+    # Copy frame for drawing
+
+    annotated = frame.copy()
+
+    results: List[Dict[str, Any]] = []
+
+
+    # ----------------------------------------------------
+    # CHECK TRAINED MODEL
+    # ----------------------------------------------------
+
+    if not self.recognizer.is_trained:
+
+        cv2.putText(
+
+            annotated,
+
+            "Model not trained",
+
+            (10, 30),
+
+            cv2.FONT_HERSHEY_SIMPLEX,
+
+            0.7,
+
+            (0, 0, 255),
+
+            2,
+
+            cv2.LINE_AA
+
+        )
+
+        return annotated, results
+
+
+    # ----------------------------------------------------
+    # DETECT ALL FACES
+    # ----------------------------------------------------
+
+    try:
+
+        faces = self.detector.detect(frame)
+
+
+        # IMPORTANT FIX:
+        # Some detectors return None when no face is found
+
+        if faces is None:
+
+            faces = []
+
+
+        # Convert safely to list
+
+        if not isinstance(faces, (list, tuple)):
+
+            try:
+
+                faces = list(faces)
+
+            except TypeError:
+
+                logger.warning(
+                    "Face detector returned invalid value: %s",
+                    type(faces).__name__
+                )
+
+                faces = []
+
+
+    except Exception as exc:
+
+        logger.exception(
+            "Face detection error: %s",
+            exc
+        )
+
+        return annotated, results
+
+
+    # ----------------------------------------------------
+    # NO FACE DETECTED
+    # ----------------------------------------------------
+
+    if len(faces) == 0:
+
+        return annotated, results
+
+
+    # ----------------------------------------------------
+    # PROCESS EACH FACE
+    # ----------------------------------------------------
+
+    for face in faces:
 
         try:
 
-            faces: List[DetectedFace] = (
-                self.detector.detect(frame)
-            )
+            # ------------------------------------------------
+            # VALIDATE FACE
+            # ------------------------------------------------
 
-        except Exception as exc:
+            if face is None:
 
-            logger.warning(
-                "Face detection error: %s",
-                exc
-            )
-
-            return annotated, results
+                continue
 
 
-        # ----------------------------------------------------
-        # PROCESS EACH FACE
-        # ----------------------------------------------------
+            if not hasattr(face, "box"):
 
-        for face in faces:
+                logger.warning(
+                    "Invalid detected face object."
+                )
+
+                continue
+
 
             x, y, w, h = face.box
 
 
-            # Crop face
+            # Convert coordinates safely
+
+            x = int(x)
+            y = int(y)
+            w = int(w)
+            h = int(h)
+
+
+            if w <= 0 or h <= 0:
+
+                continue
+
+
+            # ------------------------------------------------
+            # CROP FACE
+            # ------------------------------------------------
+
             crop = self.detector.crop_face(
                 frame,
                 face
@@ -606,6 +666,12 @@ class RecognitionPipeline:
 
 
             if crop is None:
+
+                continue
+
+
+            if crop.size == 0:
+
                 continue
 
 
@@ -615,18 +681,18 @@ class RecognitionPipeline:
 
             try:
 
-                (
-                    recognition_status,
-                    student_id,
-                    confidence,
-                ) = self.recognizer.identify(
-                    crop
+                recognition_status, student_id, confidence = (
+                    self.recognizer.identify(crop)
                 )
 
 
             except ModelNotTrainedError:
 
-                break
+                logger.warning(
+                    "Recognition model is not trained."
+                )
+
+                return annotated, results
 
 
             except Exception as exc:
@@ -640,33 +706,65 @@ class RecognitionPipeline:
 
 
             # ------------------------------------------------
+            # SAFE CONFIDENCE
+            # ------------------------------------------------
+
+            try:
+
+                confidence = float(confidence)
+
+            except (TypeError, ValueError):
+
+                confidence = 0.0
+
+
+            # ------------------------------------------------
             # KNOWN STUDENT
             # ------------------------------------------------
 
             if recognition_status == "known":
 
-                try:
+                name = self.attendance_manager.get_student_name(student_id)
+                attendance_allowed = (
+                    confidence >= config.ATTENDANCE_THRESHOLD
+                )
 
-                    info = (
-                        self.attendance_manager
-                        .process_recognition(
-                            student_id,
-                            confidence
+                if attendance_allowed:
+                    try:
+                        info = (
+                            self.attendance_manager
+                            .process_recognition(
+                                student_id,
+                                confidence
+                            )
                         )
-                    )
-
-                except Exception as exc:
-
-                    logger.warning(
-                        "Attendance processing error: %s",
-                        exc
-                    )
-
-                    continue
 
 
-                # New attendance = green
-                # Already marked = orange
+                        # Ensure info is always a dictionary
+
+                        if info is None:
+                            info = {}
+
+
+                    except Exception as exc:
+
+                        logger.exception(
+                            "Attendance processing error: %s",
+                            exc
+                        )
+
+                        info = {}
+                else:
+                    info = {
+                        "name": name,
+                        "status": "Match - attendance not marked",
+                        "newly_marked": False,
+                    }
+
+
+                # ------------------------------------------------
+                # COLOR
+                # ------------------------------------------------
 
                 if info.get(
                     "newly_marked",
@@ -680,9 +778,13 @@ class RecognitionPipeline:
                     color = BOX_COLOR_ALREADY
 
 
+                # ------------------------------------------------
+                # STUDENT INFORMATION
+                # ------------------------------------------------
+
                 name = info.get(
                     "name",
-                    "Student"
+                    name
                 )
 
 
@@ -694,11 +796,11 @@ class RecognitionPipeline:
 
                 label_lines = [
 
-                    name,
+                    str(name),
 
                     f"ID: {student_id}",
 
-                    attendance_status,
+                    str(attendance_status),
 
                     f"Confidence: "
                     f"{confidence * 100:.0f}%"
@@ -708,20 +810,25 @@ class RecognitionPipeline:
 
                 results.append({
 
-                    "student_id":
-                        student_id,
+                    "student_id": str(student_id),
 
-                    "name":
-                        name,
+                    "name": str(name),
 
-                    "status":
-                        attendance_status,
+                    "status": str(attendance_status),
 
-                    "confidence":
-                        round(confidence, 4),
+                    "confidence": round(
+                        confidence,
+                        4
+                    ),
 
-                    "box":
-                        [x, y, w, h],
+                    "box": [
+
+                        x,
+                        y,
+                        w,
+                        h
+
+                    ]
 
                 })
 
@@ -747,20 +854,25 @@ class RecognitionPipeline:
 
                 results.append({
 
-                    "student_id":
-                        None,
+                    "student_id": None,
 
-                    "name":
-                        "Unknown",
+                    "name": "Unknown",
 
-                    "status":
-                        "Unknown",
+                    "status": "Unknown",
 
-                    "confidence":
-                        round(confidence, 4),
+                    "confidence": round(
+                        confidence,
+                        4
+                    ),
 
-                    "box":
-                        [x, y, w, h],
+                    "box": [
+
+                        x,
+                        y,
+                        w,
+                        h
+
+                    ]
 
                 })
 
@@ -785,7 +897,20 @@ class RecognitionPipeline:
             )
 
 
-        return annotated, results
+        except Exception as exc:
+
+            # IMPORTANT:
+            # One bad face should not crash recognition
+
+            logger.exception(
+                "Error processing detected face: %s",
+                exc
+            )
+
+            continue
+
+
+    return annotated, results
 
 
     # ========================================================
@@ -807,6 +932,10 @@ class RecognitionPipeline:
         label_lines: List[str],
 
     ) -> None:
+
+
+        if frame is None:
+            return
 
 
         frame_height, frame_width = (
@@ -882,7 +1011,7 @@ class RecognitionPipeline:
 
             text_size, _ = cv2.getTextSize(
 
-                line,
+                str(line),
 
                 font,
 
@@ -934,16 +1063,22 @@ class RecognitionPipeline:
         if text_top + label_height > frame_height:
 
             text_top = max(
+
                 0,
+
                 frame_height - label_height
+
             )
 
 
         # Keep label width inside frame
 
         label_width = min(
+
             label_width,
-            frame_width - x
+
+            max(1, frame_width - x)
+
         )
 
 
@@ -958,8 +1093,11 @@ class RecognitionPipeline:
             (x, text_top),
 
             (
+
                 x + label_width,
+
                 text_top + label_height
+
             ),
 
             color,
@@ -969,7 +1107,7 @@ class RecognitionPipeline:
         )
 
 
-               # ----------------------------------------------------
+        # ----------------------------------------------------
         # DRAW TEXT
         # ----------------------------------------------------
 
@@ -985,11 +1123,12 @@ class RecognitionPipeline:
 
             )
 
+
             cv2.putText(
 
                 frame,
 
-                line,
+                str(line),
 
                 (x + 6, text_y),
 

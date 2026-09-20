@@ -26,6 +26,7 @@ LABEL_ENCODER_PATH = os.path.join(MODEL_DIR, "label_encoder.pkl")
 EMBEDDINGS_PATH = os.path.join(MODEL_DIR, "embeddings.npy")
 LABELS_PATH = os.path.join(MODEL_DIR, "labels.npy")
 METADATA_PATH = os.path.join(MODEL_DIR, "training_metadata.json")
+EMBEDDING_CACHE_PATH = os.path.join(MODEL_DIR, "embedding_cache.json")
 
 ATTENDANCE_DIR = os.path.join(BASE_DIR, "attendance")
 DATABASE_PATH = os.path.join(ATTENDANCE_DIR, "attendance.db")
@@ -52,11 +53,11 @@ CAMERA_FRAME_HEIGHT = int(
 # Face detection (MTCNN)
 # ---------------------------------------------------------------------------
 # Minimum MTCNN confidence for a detection to be accepted at all.
-FACE_CONFIDENCE_THRESHOLD = float(os.environ.get("FACE_CONFIDENCE_THRESHOLD", 0.90))
+FACE_CONFIDENCE_THRESHOLD = float(os.environ.get("FACE_CONFIDENCE_THRESHOLD", 0.75))
 
 # Faces smaller than this (in pixels, on the smaller side of the bbox) are
 # discarded as noise / false positives.
-MIN_FACE_SIZE = int(os.environ.get("MIN_FACE_SIZE", 40))
+MIN_FACE_SIZE = int(os.environ.get("MIN_FACE_SIZE", 25))
 
 # ---------------------------------------------------------------------------
 # Feature extraction (VGGFace)
@@ -65,17 +66,28 @@ MIN_FACE_SIZE = int(os.environ.get("MIN_FACE_SIZE", 40))
 IMAGE_SIZE = (224, 224)
 
 # Which VGGFace-compatible model backend to use for feature extraction.
-# See app/face_recognizer.py and README.md ("VGGFace compatibility note").
-VGGFACE_MODEL_NAME = "VGG-Face"
+# VGG-Face is accurate but very memory-heavy on typical laptops; use the
+# lighter Facenet default here to avoid the ArrayMemoryError seen on local
+# Windows machines.
+VGGFACE_MODEL_NAME = os.environ.get("VGGFACE_MODEL_NAME", "Facenet")
 
 # ---------------------------------------------------------------------------
 # Recognition / classification (SVM)
 # ---------------------------------------------------------------------------
-# Minimum SVM class-probability required to accept a prediction as a known
-# student. Anything below this is reported as "Unknown" and NOT marked
-# present. This is what stops the system from forcing every face into a
-# known identity.
-RECOGNITION_THRESHOLD = float(os.environ.get("RECOGNITION_THRESHOLD", 0.55))
+# Minimum SVM probability required to show the predicted student's name.
+RECOGNITION_THRESHOLD = float(os.environ.get("RECOGNITION_THRESHOLD", 0.40))
+
+# A displayed identity is only allowed to create attendance at this higher
+# confidence level.
+ATTENDANCE_THRESHOLD = float(
+    os.environ.get("ATTENDANCE_THRESHOLD", 0.50)
+)
+
+# Browser-camera liveness gate. Recognition requires an open -> closed ->
+# open eye sequence before attendance is accepted.
+LIVENESS_REQUIRED_BLINKS = int(
+    os.environ.get("LIVENESS_REQUIRED_BLINKS", 1)
+)
 
 # SVM hyper-parameters (used by scripts/train_model.py)
 SVM_KERNEL = "linear"
@@ -98,7 +110,9 @@ ONE_ATTENDANCE_PER_DAY = True
 # ---------------------------------------------------------------------------
 # Face collection (registration)
 # ---------------------------------------------------------------------------
-NUM_COLLECTION_IMAGES = int(os.environ.get("NUM_COLLECTION_IMAGES", 25))
+NUM_COLLECTION_IMAGES = int(os.environ.get("NUM_COLLECTION_IMAGES", 5))
+MIN_COLLECTION_IMAGES = 5
+MAX_COLLECTION_IMAGES = 30
 COLLECTION_CAPTURE_DELAY_MS = 250  # minimum delay between accepted captures
 
 # ---------------------------------------------------------------------------
@@ -114,6 +128,18 @@ FLASK_PORT = int(
 FLASK_DEBUG = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "change-this-secret-key")
+
+# ---------------------------------------------------------------------------
+# Registration email (SMTP)
+# ---------------------------------------------------------------------------
+SMTP_HOST = os.environ.get("SMTP_HOST", "").strip()
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USERNAME = os.environ.get("SMTP_USERNAME", "").strip()
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+SMTP_FROM = os.environ.get("SMTP_FROM", "").strip()
+SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "true").lower() == "true"
+SMTP_USE_SSL = os.environ.get("SMTP_USE_SSL", "false").lower() == "true"
+SMTP_TIMEOUT = int(os.environ.get("SMTP_TIMEOUT", "20"))
 
 # ---------------------------------------------------------------------------
 # Ensure required directories exist (created automatically, no manual setup)

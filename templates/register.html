@@ -89,10 +89,29 @@ Register Student - Face Attendance System
 
                     <li>
                         Click Capture Photo until
-                        {{ target_count }} images are collected.
+                        the selected number of images are collected.
                     </li>
 
                 </ul>
+
+                <label for="targetCount" class="form-label">
+                    Number of photos
+                </label>
+
+                <input
+                    id="targetCount"
+                    type="range"
+                    class="form-range"
+                    min="5"
+                    max="30"
+                    value="{{ target_count }}"
+                    oninput="updateTargetCount(this.value)"
+                >
+
+                <div class="text-center mb-3">
+                    <strong id="targetCountValue">{{ target_count }}</strong>
+                    photos
+                </div>
 
 
                 <!-- PROGRESS -->
@@ -173,13 +192,34 @@ Register Student - Face Attendance System
 
 let captured = {{ existing_count }};
 
-const target = {{ target_count }};
+let target = {{ target_count }};
 
 const folderName = "{{ folder_name }}";
 
 const studentId = "{{ student_id }}";
 
 let stream = null;
+
+function updateTargetCount(value) {
+    const selected = Math.max(5, Math.min(30, Number(value) || 5));
+    target = selected;
+    document.getElementById("targetCountValue").textContent = selected;
+
+    const progress = document.getElementById("captureProgress");
+    progress.style.width = `${Math.min(100, Math.round((captured / target) * 100))}%`;
+    progress.textContent = `${captured} / ${target}`;
+
+    const captureBtn = document.getElementById("captureBtn");
+    if (captured >= target) {
+        captureBtn.disabled = true;
+        captureBtn.classList.add("d-none");
+        document.getElementById("doneBtn").classList.remove("d-none");
+    } else if (stream) {
+        captureBtn.disabled = false;
+        captureBtn.classList.remove("d-none");
+        document.getElementById("doneBtn").classList.add("d-none");
+    }
+}
 
 
 /* ============================================
@@ -229,9 +269,9 @@ async function startCamera() {
         await video.play();
 
 
-        document
-            .getElementById("captureBtn")
-            .disabled = false;
+        updateTargetCount(
+            document.getElementById("targetCount").value
+        );
 
 
         startBtn.disabled = true;
@@ -263,6 +303,10 @@ async function startCamera() {
 ============================================ */
 
 async function captureImage() {
+
+    if (captured >= target) {
+        return;
+    }
 
     const btn =
         document.getElementById("captureBtn");
@@ -378,6 +422,11 @@ async function captureImage() {
 
             folderName
 
+        );
+
+        formData.append(
+            "target_count",
+            document.getElementById("targetCount").value
         );
 
 

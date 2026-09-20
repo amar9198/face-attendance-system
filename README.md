@@ -232,7 +232,8 @@ environment variables:
 |---|---|---|
 | `CAMERA_INDEX` | Which webcam to use | `0` |
 | `FACE_CONFIDENCE_THRESHOLD` | Minimum MTCNN detection confidence | `0.90` |
-| `RECOGNITION_THRESHOLD` | Minimum SVM probability to accept an identity (else "Unknown") | `0.55` |
+| `RECOGNITION_THRESHOLD` | Minimum SVM probability to show the predicted student's name | `0.40` |
+| `ATTENDANCE_THRESHOLD` | Minimum SVM probability required to mark attendance | `0.50` |
 | `IMAGE_SIZE` | VGGFace input size | `(224, 224)` |
 | `NUM_COLLECTION_IMAGES` | Images captured per student during registration | `25` |
 | `DATASET_PATH` | Where face images are stored | `dataset/students` |
@@ -243,6 +244,11 @@ Example (Linux/macOS):
 ```bash
 CAMERA_INDEX=1 RECOGNITION_THRESHOLD=0.65 python app/main.py
 ```
+
+The student email field is optional and is stored only as contact information.
+Registration does not send email messages. Model training evaluates a
+holdout split, then fits the saved classifier on all available face images
+so recognition uses the complete registered dataset.
 
 ## 9. Troubleshooting
 

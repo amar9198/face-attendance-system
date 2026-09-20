@@ -31,10 +31,19 @@
                         <a href="{{ url_for('capture', student_id=s.student_id, name=s.name.replace(' ', '_')) }}" class="btn btn-sm btn-outline-secondary">
                             <i class="bi bi-camera"></i> Add More Photos
                         </a>
-                        <form method="post" action="{{ url_for('delete_student', student_id=s.student_id) }}" class="d-inline"
-                              onsubmit="return confirm('Delete {{ s.student_id }} and all their attendance records? This also removes them from the recognition model on next retrain.');">
-                            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                        </form>
+                        <form
+    method="post"
+    action="{{ url_for('delete_student', student_id=s.student_id) }}"
+    class="d-inline"
+>
+    <button
+        type="submit"
+        class="btn btn-danger btn-sm"
+        onclick="return confirm('Are you sure you want to delete this student?')"
+    >
+        Delete
+    </button>
+</form>
                     </td>
                 </tr>
             {% endfor %}
@@ -58,26 +67,54 @@
 <script>
 function trainModel() {
     const box = document.getElementById('trainStatus');
+    const button = document.querySelector('button[onclick="trainModel()"]');
+
+    if (button && button.disabled) {
+        return;
+    }
+
+    if (button) {
+        button.disabled = true;
+        button.dataset.originalText = button.innerHTML;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Training...';
+    }
+
     box.classList.remove('d-none', 'alert-danger', 'alert-success');
     box.classList.add('alert-info');
-    box.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Extracting features and training SVM... this may take a while depending on dataset size.';
+    box.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Checking new face data and training the model...';
+
     fetch('/api/train', { method: 'POST' })
-        .then(r => r.json())
+        .then(async r => {
+            const data = await r.json();
+            if (!r.ok) {
+                throw new Error(data.message || data.log || 'Training failed.');
+            }
+            return data;
+        })
         .then(data => {
             if (data.success) {
                 box.classList.remove('alert-info');
                 box.classList.add('alert-success');
-                box.innerHTML = '<i class="bi bi-check-circle"></i> Model trained successfully. Live attendance will use the updated model.';
+                const duration = data.duration_seconds
+                    ? ` (${data.duration_seconds.toFixed(1)}s)`
+                    : '';
+                box.innerHTML = '<i class="bi bi-check-circle"></i> Model trained successfully' + duration + '. Live attendance will use the updated model.';
             } else {
                 box.classList.remove('alert-info');
                 box.classList.add('alert-danger');
-                box.innerHTML = '<i class="bi bi-x-circle"></i> Training failed at stage: ' + data.stage + '. Check logs/attendance_system.log for details.';
+                box.innerHTML = '<i class="bi bi-x-circle"></i> Training failed' + (data.stage ? ' at stage: ' + data.stage : '') + '. Check logs/attendance_system.log for details.';
             }
         })
-        .catch(() => {
+        .catch(error => {
             box.classList.remove('alert-info');
             box.classList.add('alert-danger');
-            box.innerHTML = 'Request failed. Is the server running?';
+            box.innerHTML = '<i class="bi bi-x-circle"></i> ' + (error.message || 'Training request failed.');
+        })
+        .finally(() => {
+            if (button) {
+                button.disabled = false;
+                button.innerHTML = button.dataset.originalText;
+            }
         });
 }
 </script>

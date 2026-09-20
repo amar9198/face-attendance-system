@@ -39,6 +39,11 @@ class AttendanceManager:
             self._today = today
             self._marked_cache = set(database.get_today_present_ids(today))
 
+    @staticmethod
+    def get_student_name(student_id: str) -> str:
+        student = database.get_student(student_id)
+        return student["name"] if student else student_id
+
     def process_recognition(self, student_id: str, confidence: float) -> Dict[str, Any]:
         """Called once per recognized face per frame.
 

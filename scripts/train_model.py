@@ -129,8 +129,19 @@ def main() -> int:
     else:
         logger.warning("Validation set was empty; skipping validation accuracy check.")
 
+    # Train the persisted classifier on every available embedding after the
+    # holdout evaluation. This lets recognition use all captured face images
+    # while keeping the validation accuracy an honest quality indicator.
+    final_svm = SVC(
+        kernel=config.SVM_KERNEL,
+        C=config.SVM_C,
+        probability=config.SVM_PROBABILITY,
+        random_state=config.RANDOM_SEED,
+    )
+    final_svm.fit(X, y_encoded)
+
     # ---- Persist artifacts -----------------------------------------------------
-    joblib.dump(svm, config.SVM_MODEL_PATH)
+    joblib.dump(final_svm, config.SVM_MODEL_PATH)
     joblib.dump(label_encoder, config.LABEL_ENCODER_PATH)
 
     # Save the test split indices/labels alongside so evaluate_model.py can
@@ -147,6 +158,7 @@ def main() -> int:
         "train_size": int(len(X_train)),
         "val_size": int(len(X_val)),
         "test_size": int(len(X_test)),
+        "classifier_fit_size": int(len(X)),
         "validation_accuracy": val_accuracy,
         "svm_kernel": config.SVM_KERNEL,
         "svm_C": config.SVM_C,
