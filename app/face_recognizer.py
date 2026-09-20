@@ -31,6 +31,22 @@ from app.utils import (
 logger = get_logger(__name__)
 
 
+class SingleClassClassifier:
+    """Minimal probability classifier for datasets containing one student."""
+
+    def __init__(self):
+        self.classes_ = np.array([0], dtype=np.int64)
+
+    def fit(self, X, y):
+        return self
+
+    def predict(self, X):
+        return np.zeros(len(X), dtype=np.int64)
+
+    def predict_proba(self, X):
+        return np.ones((len(X), 1), dtype=np.float32)
+
+
 # ============================================================
 # FACE EMBEDDING
 # ============================================================

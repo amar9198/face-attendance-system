@@ -86,9 +86,9 @@ def main() -> int:
     unique_students = sorted(set(sid for _, sid in pairs))
     logger.info("Found %d images across %d students.", len(pairs), len(unique_students))
 
-    if len(unique_students) < 2:
+    if len(unique_students) < 1:
         logger.error(
-            "At least 2 different students are required to train a classifier "
+            "At least 1 student is required to train a classifier "
             "(found %d). Register more students before extracting features.",
             len(unique_students),
         )

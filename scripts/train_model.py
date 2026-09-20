@@ -33,6 +33,7 @@ from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score
 
 from app import config
+from app.face_recognizer import SingleClassClassifier
 from app.utils import get_logger, EmptyDatasetError
 
 logger = get_logger(__name__)
@@ -60,11 +61,7 @@ def main() -> int:
     for cls, cnt in zip(classes, counts):
         logger.info("  %s: %d images", cls, cnt)
 
-    if len(classes) < 2:
-        logger.error("Need at least 2 students with images to train a classifier.")
-        return 1
-
-    if np.min(counts) < 3:
+    if np.min(counts) < 3 and len(classes) > 1:
         logger.warning(
             "At least one student has fewer than 3 images. Train/val/test "
             "splitting works best with >= 5 images per student; consider "
@@ -75,70 +72,86 @@ def main() -> int:
     label_encoder = LabelEncoder()
     y_encoded = label_encoder.fit_transform(y)
 
-    # ---- Train / validation / test split -----------------------------------
+    # A one-student dataset cannot be used with SVC, because SVC requires
+    # at least two classes. Persist a compatible constant classifier instead.
+    if len(classes) == 1:
+        logger.warning(
+            "Training a single-student model. Any detected face will be "
+            "assigned to %s until another student is registered.",
+            classes[0],
+        )
+        final_svm = SingleClassClassifier()
+        final_svm.fit(X, y_encoded)
+        X_train = X
+        X_val = np.empty((0, X.shape[1]), dtype=X.dtype)
+        X_test = np.empty((0, X.shape[1]), dtype=X.dtype)
+        y_test = np.empty((0,), dtype=y_encoded.dtype)
+        val_accuracy = None
+    else:
+        # ---- Train / validation / test split -----------------------------------
     # Stratify to keep class proportions consistent across splits wherever
     # the per-class count allows it (falls back to a non-stratified split
     # if a class has too few samples for stratification to be possible).
-    try:
-        X_train, X_temp, y_train, y_temp = train_test_split(
+        try:
+            X_train, X_temp, y_train, y_temp = train_test_split(
             X, y_encoded,
             test_size=(config.VAL_SPLIT + config.TEST_SPLIT),
             random_state=config.RANDOM_SEED,
             stratify=y_encoded,
         )
-        relative_test_size = config.TEST_SPLIT / (config.VAL_SPLIT + config.TEST_SPLIT)
-        X_val, X_test, y_val, y_test = train_test_split(
+            relative_test_size = config.TEST_SPLIT / (config.VAL_SPLIT + config.TEST_SPLIT)
+            X_val, X_test, y_val, y_test = train_test_split(
             X_temp, y_temp,
             test_size=relative_test_size,
             random_state=config.RANDOM_SEED,
             stratify=y_temp,
         )
-    except ValueError:
-        logger.warning("Stratified split not possible (too few samples in a class); using a random split instead.")
-        X_train, X_temp, y_train, y_temp = train_test_split(
+        except ValueError:
+            logger.warning("Stratified split not possible (too few samples in a class); using a random split instead.")
+            X_train, X_temp, y_train, y_temp = train_test_split(
             X, y_encoded, test_size=(config.VAL_SPLIT + config.TEST_SPLIT), random_state=config.RANDOM_SEED,
         )
-        relative_test_size = config.TEST_SPLIT / (config.VAL_SPLIT + config.TEST_SPLIT)
-        X_val, X_test, y_val, y_test = train_test_split(
+            relative_test_size = config.TEST_SPLIT / (config.VAL_SPLIT + config.TEST_SPLIT)
+            X_val, X_test, y_val, y_test = train_test_split(
             X_temp, y_temp, test_size=relative_test_size, random_state=config.RANDOM_SEED,
         )
 
-    logger.info(
-        "Split sizes -> train: %d, val: %d, test: %d",
-        len(X_train), len(X_val), len(X_test),
-    )
+        logger.info(
+            "Split sizes -> train: %d, val: %d, test: %d",
+            len(X_train), len(X_val), len(X_test),
+        )
 
-    # ---- Train the SVM -------------------------------------------------------
-    logger.info(
+        # ---- Train the SVM -------------------------------------------------------
+        logger.info(
         "Training SVM (kernel=%s, C=%s, probability=%s)...",
         config.SVM_KERNEL, config.SVM_C, config.SVM_PROBABILITY,
     )
-    svm = SVC(
+        svm = SVC(
         kernel=config.SVM_KERNEL,
         C=config.SVM_C,
         probability=config.SVM_PROBABILITY,
         random_state=config.RANDOM_SEED,
     )
-    svm.fit(X_train, y_train)
+        svm.fit(X_train, y_train)
 
     # ---- Quick validation-set sanity check -----------------------------------
-    val_preds = svm.predict(X_val) if len(X_val) else np.array([])
-    val_accuracy = float(accuracy_score(y_val, val_preds)) if len(X_val) else None
-    if val_accuracy is not None:
-        logger.info("Validation accuracy: %.2f%%", val_accuracy * 100)
-    else:
-        logger.warning("Validation set was empty; skipping validation accuracy check.")
+        val_preds = svm.predict(X_val) if len(X_val) else np.array([])
+        val_accuracy = float(accuracy_score(y_val, val_preds)) if len(X_val) else None
+        if val_accuracy is not None:
+            logger.info("Validation accuracy: %.2f%%", val_accuracy * 100)
+        else:
+            logger.warning("Validation set was empty; skipping validation accuracy check.")
 
     # Train the persisted classifier on every available embedding after the
     # holdout evaluation. This lets recognition use all captured face images
     # while keeping the validation accuracy an honest quality indicator.
-    final_svm = SVC(
+        final_svm = SVC(
         kernel=config.SVM_KERNEL,
         C=config.SVM_C,
         probability=config.SVM_PROBABILITY,
         random_state=config.RANDOM_SEED,
     )
-    final_svm.fit(X, y_encoded)
+        final_svm.fit(X, y_encoded)
 
     # ---- Persist artifacts -----------------------------------------------------
     joblib.dump(final_svm, config.SVM_MODEL_PATH)
