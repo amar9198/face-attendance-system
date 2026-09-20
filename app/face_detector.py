@@ -18,6 +18,7 @@ Used by:
     - Attendance system
 """
 
+import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -99,6 +100,12 @@ class FaceDetector:
 
         # MTCNN loads only when first needed
         self._detector = None
+        self._fallback_detector = cv2.CascadeClassifier(
+            os.path.join(
+                cv2.data.haarcascades,
+                "haarcascade_frontalface_default.xml",
+            )
+        )
 
 
     # ========================================================
@@ -240,7 +247,7 @@ class FaceDetector:
                 exc
             )
 
-            return []
+            return self._detect_opencv_fallback(frame_bgr)
 
 
         # ----------------------------------------------------
@@ -261,7 +268,7 @@ class FaceDetector:
                 exc
             )
 
-            return []
+            return self._detect_opencv_fallback(frame_bgr)
 
 
         # ----------------------------------------------------
@@ -281,7 +288,7 @@ class FaceDetector:
                 exc
             )
 
-            return []
+            return self._detect_opencv_fallback(frame_bgr)
 
 
         # ----------------------------------------------------
@@ -290,7 +297,7 @@ class FaceDetector:
 
         if raw_results is None:
 
-            return []
+            return self._detect_opencv_fallback(frame_bgr)
 
 
         if not isinstance(
@@ -303,7 +310,7 @@ class FaceDetector:
                 type(raw_results).__name__
             )
 
-            return []
+            return self._detect_opencv_fallback(frame_bgr)
 
 
         # ----------------------------------------------------
@@ -531,6 +538,44 @@ class FaceDetector:
         # ====================================================
         # IMPORTANT: ALWAYS RETURN A LIST
         # ====================================================
+
+        if faces:
+            return faces
+
+        return self._detect_opencv_fallback(frame_bgr)
+
+    def _detect_opencv_fallback(
+        self,
+        frame_bgr: np.ndarray,
+    ) -> List[DetectedFace]:
+        """Use OpenCV's bundled detector when MTCNN misses a clear face."""
+        try:
+            gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+            gray = cv2.equalizeHist(gray)
+            detections = self._fallback_detector.detectMultiScale(
+                gray,
+                scaleFactor=1.1,
+                minNeighbors=4,
+                minSize=(self.min_face_size, self.min_face_size),
+            )
+        except Exception as exc:
+            logger.warning("OpenCV fallback face detection failed: %s", exc)
+            return []
+
+        faces = []
+        for x, y, width, height in detections:
+            faces.append(
+                DetectedFace(
+                    box=(int(x), int(y), int(width), int(height)),
+                    confidence=1.0,
+                )
+            )
+
+        if faces:
+            logger.info(
+                "MTCNN found no usable face; OpenCV fallback detected %d face(s).",
+                len(faces),
+            )
 
         return faces
 
